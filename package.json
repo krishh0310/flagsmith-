@@ -1,0 +1,35 @@
+{
+  "name": "flag-rehearsal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "init:demo": "node scripts/init-demo.ts",
+    "setup:flagsmith": "node --env-file=.env scripts/setup-flagsmith.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "start:current": "vite preview --mode current --host 127.0.0.1 --port 4173 --strictPort",
+    "start:proposed": "vite preview --mode proposed --host 127.0.0.1 --port 4174 --strictPort",
+    "test:e2e": "playwright test",
+    "rehearse": "node scripts/rehearse.ts",
+    "dashboard": "vite build --mode dashboard && node scripts/start-dashboard.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@types/node": "24.10.0",
+    "@types/react": "19.3.3",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.7"
+  },
+  "dependencies": {
+    "@fastify/static": "10.1.5",
+    "@flagsmith/flagsmith": "12.5.0",
+    "fastify": "5.12.8",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  }
+}

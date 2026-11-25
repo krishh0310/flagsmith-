@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-dashboard/
+test-results/
+playwright-report/
+rehearsal-runs/
+.env
+.env.*
+!.env.example

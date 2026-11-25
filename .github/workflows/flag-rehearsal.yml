@@ -1,0 +1,52 @@
+name: Flag Rehearsal
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      proposed_order:
+        description: Proposed override order
+        type: choice
+        options: [fixed, broken]
+        default: fixed
+
+permissions:
+  contents: read
+
+jobs:
+  checkout-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: flag-rehearsal-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      PROPOSED_ORDER: ${{ inputs.proposed_order || 'fixed' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps --only-shell chromium
+      - name: Start an isolated Flagsmith demo
+        run: |
+          npm run init:demo
+          docker compose up -d --wait --wait-timeout 240
+          npm run setup:flagsmith -- "$PROPOSED_ORDER"
+      - name: Check Proposed against Current
+        run: npm run rehearse
+      - name: Preserve rehearsal report and evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: flag-rehearsal-${{ env.PROPOSED_ORDER }}
+          path: rehearsal-runs/
+          if-no-files-found: warn
+      - name: Stop the isolated demo
+        if: ${{ always() }}
+        run: |
+          if test -f .env; then
+            docker compose down --volumes
+          fi
