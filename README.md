@@ -114,4 +114,4 @@ The browser suite uses the running seeded Flagsmith instance and checkout previe
 
 ## License
 
-The MIT copyright notice is pending confirmation of the holder and year.
+Flag Rehearsal is available under the [MIT License](LICENSE).
