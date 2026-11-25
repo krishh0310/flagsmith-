@@ -31,10 +31,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps --only-shell chromium
       - name: Start an isolated Flagsmith demo
-        run: |
-          npm run init:demo
-          docker compose up -d --wait --wait-timeout 240
-          npm run setup:flagsmith -- "$PROPOSED_ORDER"
+        run: npm run setup:demo -- "$PROPOSED_ORDER"
       - name: Check Proposed against Current
         run: npm run rehearse
       - name: Preserve rehearsal report and evidence

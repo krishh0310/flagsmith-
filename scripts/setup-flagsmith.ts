@@ -36,8 +36,8 @@ async function request<T>(path: string, label: string, options: RequestInit = {}
 
 async function setup() {
   const order = process.argv[2];
-  if (order !== undefined && order !== 'broken' && order !== 'fixed') {
-    throw new Error('Usage: npm run setup:flagsmith -- [broken | fixed]');
+  if (order !== undefined && order !== 'broken' && order !== 'fixed' && order !== 'onboarding-broken' && order !== 'onboarding-fixed') {
+    throw new Error('Usage: npm run setup:flagsmith -- [broken | fixed | onboarding-broken | onboarding-fixed]');
   }
   const email = process.env.FLAGSMITH_ADMIN_EMAIL;
   const password = process.env.FLAGSMITH_ADMIN_PASSWORD;
@@ -144,9 +144,9 @@ async function setup() {
   if (order) {
     const projectPath = `projects/${project.id}/`;
     const flags = await list<Resource>(projectPath + 'features/', 'List demo flags');
-    const flag = flags.find(({ name }) => name === 'express_checkout') ??
-      await create<Resource>(projectPath + 'features/', 'Create express_checkout', {
-        name: 'express_checkout', type: 'STANDARD', default_enabled: false,
+    const ensureFlag = async (flagName: string) => flags.find(({ name }) => name === flagName) ??
+      await create<Resource>(projectPath + 'features/', `Create ${flagName}`, {
+        name: flagName, type: 'STANDARD', default_enabled: false,
       });
     const existing = await list<Segment>(projectPath + 'segments/', 'List demo segments');
     const definitions = [
@@ -171,30 +171,51 @@ async function setup() {
       overrides.push({ priority, segment: { id: segment.id }, enabled });
     }
 
-    const flagPath = (name: string) =>
-      `/api/__future__/environments/${sdkKeys.get(`FLAGSMITH_${name}_ENVIRONMENT_KEY`)}/features/${flag.id}/`;
-    const current = await request<FlagState>(flagPath('CURRENT'), 'Read Current flag', { headers });
-    if (current.environment_default.enabled || current.segment_overrides.length) {
-      throw new Error('Current differs from the demo baseline. Check its default and overrides in Flagsmith.');
+    if (order.startsWith('onboarding-')) {
+      const [paid, older] = overrides;
+      for (const flagName of ['new_onboarding', 'save_onboarding_progress']) {
+        const feature = await ensureFlag(flagName);
+        for (const name of environmentNames) {
+          const proposed = name === 'Proposed';
+          const matches = flagName === 'new_onboarding'
+            ? (proposed ? [paid] : [])
+            : (proposed && order === 'onboarding-fixed' ? [older, paid] : [older]);
+          const path = `/api/__future__/environments/${sdkKeys.get(`FLAGSMITH_${name.toUpperCase()}_ENVIRONMENT_KEY`)}/features/${feature.id}/`;
+          await request(path, `Set ${name} ${flagName}`, {
+            method: 'PATCH', headers, body: JSON.stringify({
+              environment_default: { enabled: false },
+              segment_overrides: matches.map(({ segment }, priority) => ({ segment, priority, enabled: true })),
+            }),
+          });
+        }
+      }
+    } else {
+      const flag = await ensureFlag('express_checkout');
+      const flagPath = (name: string) =>
+        `/api/__future__/environments/${sdkKeys.get(`FLAGSMITH_${name}_ENVIRONMENT_KEY`)}/features/${flag.id}/`;
+      const current = await request<FlagState>(flagPath('CURRENT'), 'Read Current flag', { headers });
+      if (current.environment_default.enabled || current.segment_overrides.length) {
+        throw new Error('Current differs from the demo baseline. Check its default and overrides in Flagsmith.');
+      }
+      const path = flagPath('PROPOSED');
+      const proposed = await request<FlagState>(path, 'Read Proposed flag', { headers });
+      if (proposed.segment_overrides.some(({ segment }) => !overrides.some((item) => item.segment.id === segment.id))) {
+        throw new Error('Proposed contains an unrelated override. Review it in Flagsmith.');
+      }
+      const saved = await request<FlagState>(path, 'Save Proposed demo rules', {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ environment_default: { enabled: false }, segment_overrides: overrides }),
+      });
+      if (
+        saved.environment_default.enabled || saved.segment_overrides.length !== overrides.length ||
+        saved.segment_overrides.some((item, index) =>
+          item.priority !== overrides[index].priority || item.enabled !== overrides[index].enabled ||
+          item.segment.id !== overrides[index].segment.id)
+      ) {
+        throw new Error('Flagsmith did not return the requested override order.');
+      }
+      console.log(`Proposed ${order} order: ${definitions.map(({ name }) => name).join(' → ')}`);
     }
-    const path = flagPath('PROPOSED');
-    const proposed = await request<FlagState>(path, 'Read Proposed flag', { headers });
-    if (proposed.segment_overrides.some(({ segment }) => !overrides.some((item) => item.segment.id === segment.id))) {
-      throw new Error('Proposed contains an unrelated override. Review it in Flagsmith.');
-    }
-    const saved = await request<FlagState>(path, 'Save Proposed demo rules', {
-      method: 'PATCH', headers,
-      body: JSON.stringify({ environment_default: { enabled: false }, segment_overrides: overrides }),
-    });
-    if (
-      saved.environment_default.enabled || saved.segment_overrides.length !== overrides.length ||
-      saved.segment_overrides.some((item, index) =>
-        item.priority !== overrides[index].priority || item.enabled !== overrides[index].enabled ||
-        item.segment.id !== overrides[index].segment.id)
-    ) {
-      throw new Error('Flagsmith did not return the requested override order.');
-    }
-    console.log(`Proposed ${order} order: ${definitions.map(({ name }) => name).join(' → ')}`);
   }
 
   let config = await readFile('.env', 'utf8');

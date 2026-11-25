@@ -13,6 +13,7 @@ export type JourneyContext = {
   identity: Identity;
   setup(step: string): void;
   check(step: string): void;
+  observeFlags(values: Record<string, boolean>): void;
   observe(variant: string, evaluation?: FlagEvaluation): void;
 };
 
@@ -36,6 +37,7 @@ export async function executeJourney(
   let outcome: 'setup-error' | 'fail' = 'setup-error';
   let variant: string | null = null;
   let flagEvaluation: FlagEvaluation | undefined;
+  let observedFlags: Record<string, boolean> | undefined;
   const profile = identity.id;
 
   try {
@@ -43,10 +45,11 @@ export async function executeJourney(
       page, url, environment, identity,
       setup(label) { step = label; outcome = 'setup-error'; },
       check(label) { step = label; outcome = 'fail'; },
+      observeFlags(values) { observedFlags = { ...values }; },
       observe(label, evaluation) { variant = label; flagEvaluation = evaluation; },
     });
-    return { environment, profile, variant, flagEvaluation, outcome: 'pass' };
+    return { environment, profile, variant, flagEvaluation, observedFlags, outcome: 'pass' };
   } catch (error) {
-    return { environment, profile, variant, flagEvaluation, outcome, error: { step, message: errorMessage(error) } };
+    return { environment, profile, variant, flagEvaluation, observedFlags, outcome, error: { step, message: errorMessage(error) } };
   }
 }

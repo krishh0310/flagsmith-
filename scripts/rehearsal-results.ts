@@ -8,6 +8,7 @@ export type CaseResult = {
   environment: Environment;
   profile: string;
   variant: string | null;
+  observedFlags?: Record<string, boolean>;
   flagEvaluation?: FlagEvaluation;
   outcome: 'pass' | 'fail' | 'setup-error';
   error?: { step: string; message: string };

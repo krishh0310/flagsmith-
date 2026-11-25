@@ -15,13 +15,11 @@ From a fresh clone, run:
 ```sh
 npm ci
 npx playwright install --only-shell chromium
-npm run init:demo
-docker compose up -d --wait --wait-timeout 240
-npm run setup:flagsmith -- broken
+npm run setup:demo
 npm run dashboard
 ```
 
-- `init:demo` creates a Git-ignored `.env` with local credentials. Reuse an existing `.env` by skipping this command.
+- `setup:demo` creates a Git-ignored `.env` on first use, starts Compose, waits for migrations and readiness, and seeds checkout. Rerunning reuses the credentials and selects the broken demo order. Use `npm run setup:demo -- fixed` to select the fixed order.
 - Compose starts Flagsmith 2.295.2 and PostgreSQL 15.18, runs migrations, and waits for the health check. Seeding creates the demo project, environments, flag, and overrides. It prints **SDK endpoint verified** for both environments and saves the client-side SDK keys to `.env`. Initial setup needs no manual Flagsmith changes. For an existing Flagsmith instance, set `FLAGSMITH_ADMIN_EMAIL` and `FLAGSMITH_ADMIN_PASSWORD` in `.env` before seeding.
 - Open [Flag Rehearsal](http://127.0.0.1:4175) and click **Run Rehearsal**. The broken order shows **Current 3/3** and **Proposed 2/3**. For the same rehearsal from a terminal, run `npm run rehearse` from the project root.
 
@@ -95,11 +93,40 @@ To try explicit target URLs, run `npm run build`, then start `npm run start:curr
 
 Run `npm run rehearse -- preview-smoke`. For your own app, replace the URLs and synthetic identities and register a journey that applies those identities using your app’s sign-in or test interface. See the [journey contract](scripts/journey.ts) for `setup(step)`, `check(step)`, and `observe(variant)`. Journey errors record the active step. Keep customer data out of traces by using synthetic identities.
 
+### Independent example: workspace onboarding
+
+This separate app runs on ports 4181 (Current) and 4182 (Proposed). Its new flow saves a workspace draft and resumes after a reload. Classic finishes in one step. After the checkout quick start, launch the example in one terminal:
+
+```sh
+npm run setup:flagsmith -- onboarding-broken
+npm run start:onboarding
+```
+
+In a second terminal, keep the same two app servers running:
+
+```sh
+npm run rehearse -- onboarding
+# Exit 1. Enable saving for the paid cohort in Proposed.
+npm run setup:flagsmith -- onboarding-fixed
+npm run rehearse -- onboarding
+# Exit 0. Stop the example servers with Ctrl+C in the first terminal.
+```
+
+Both flags default off. Proposed enables `new_onboarding` for Paid plan. Both environments initially enable `save_onboarding_progress` for Older app version. The fix additionally enables saving for Paid plan in Proposed. The runner records both SDK decisions in each case’s optional `observedFlags` field. The onboarding report makes no attribution to a particular matching rule.
+
+| Profile | Current (both runs) | Proposed broken | Proposed fixed |
+| --- | --- | --- | --- |
+| starter (free, v2) | Classic, saving off · pass | Classic, off · pass | Classic, off · pass |
+| pilot (paid, v1) | Classic, saving on · pass | New, on · pass | New, on · pass |
+| team (paid, v2) | Classic, saving off · pass | New, off · **cannot save workspace progress** | New, on · pass |
+
+To bring your own app, copy [the onboarding journey](examples/onboarding/journey.ts), change its URLs, synthetic identities, and browser steps, then import it in [the registry](rehearsal.config.ts). The [example app](examples/onboarding/main.ts) and its [two preview servers](examples/onboarding/serve.ts) illustrate the target-side SDK integration. Checkout remains the default CLI and dashboard journey.
+
 ### CI
 
 The [GitHub Actions workflow](.github/workflows/flag-rehearsal.yml) starts an isolated Flagsmith stack, seeds Proposed, and runs `npm run rehearse`. Pull requests use the fixed demo order. To exercise both outcomes, use **Actions → Flag Rehearsal → Run workflow** and choose `broken` or `fixed`. Any nonzero exit fails the check. The upload step runs even after failure. In the run’s **Artifacts** section, look for `flag-rehearsal-broken` or `flag-rehearsal-fixed` for the JSON report, summary, and any screenshots and traces.
 
-To adapt the workflow, replace demo seeding with your Flagsmith setup, apply the candidate configuration to Proposed, and run your registered journey against the two app URLs. Keep the CLI exit status and the artifact step. For shared infrastructure, put management credentials in CI secret storage. The broken and fixed commands were verified locally against fresh self-hosted Flagsmith. Hosted execution and upload are unverified.
+This is an example check. To adapt the workflow, replace demo seeding with your Flagsmith setup, apply the candidate configuration to Proposed, and run your registered journey against the two app URLs. Keep the CLI exit status and the artifact step. For shared infrastructure, put management credentials in CI secret storage. The broken and fixed commands were verified locally against fresh self-hosted Flagsmith. Hosted execution and upload are unverified.
 
 ### Developer checks
 

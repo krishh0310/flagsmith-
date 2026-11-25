@@ -15,7 +15,9 @@
     "start:proposed": "vite preview --mode proposed --host 127.0.0.1 --port 4174 --strictPort",
     "test:e2e": "playwright test",
     "rehearse": "node scripts/rehearse.ts",
-    "dashboard": "vite build --mode dashboard && node scripts/start-dashboard.ts"
+    "dashboard": "vite build --mode dashboard && node scripts/start-dashboard.ts",
+    "setup:demo": "sh scripts/setup-demo.sh",
+    "start:onboarding": "node examples/onboarding/serve.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
