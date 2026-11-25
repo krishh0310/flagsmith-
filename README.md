@@ -2,9 +2,48 @@
 
 Flag Rehearsal runs the same browser journey against Current and Proposed configurations in self-hosted Flagsmith so developers can catch checkout regressions before rollout.
 
-A flag change can leave the application build untouched and still send some customers down a broken path. The demo shows a paid customer on app version 1 getting Express checkout and failing session verification. Reordering two Flagsmith overrides restores Classic for that customer while newer paid customers keep Express.
+Two rollout rules match the same paid customer on app version 1. With **Paid plan** first, that customer gets Express and fails checkout. Moving **Older app version** first restores Classic for that customer while paid customers on version 2 keep Express.
 
-Toggle Wars Track 03 · Build on Open Source Flagsmith. [Track overview](https://www.wemakedevs.org/hackathons/flagsmith) · [Submission rules](https://www.wemakedevs.org/hackathons/flagsmith/rules) · [Project summary](SUBMISSION.md)
+![Checkout comparison showing three passes in Current and a single Proposed regression for paid-older](docs/screenshots/checkout-regression.png)
+
+**Toggle Wars Track 03** · [Project summary](SUBMISSION.md) · [Reproduce the regression](#reproduce-and-fix-the-regression) · [Try the independent onboarding example](#independent-example-workspace-onboarding)
+
+<details>
+<summary>Tour the checkout website from profile selection to order confirmation</summary>
+
+**Choose a synthetic customer**
+
+![Checkout profile selector beside the canvas tote order summary](docs/screenshots/choose-profile.png)
+
+**Current · paid-older**
+
+![Classic checkout for a paid customer on app version 1](docs/screenshots/classic.png)
+
+**Review the Classic order**
+
+![Classic checkout with the Place demo order button](docs/screenshots/classic-review.png)
+
+**Confirm the Classic order**
+
+![Completed Classic order for paid-older](docs/screenshots/classic-confirmed.png)
+
+**Proposed · paid-latest**
+
+![Express checkout for a paid customer on app version 2](docs/screenshots/express.png)
+
+**Verify the Express session**
+
+![Express checkout prompts the customer to verify the session](docs/screenshots/verify-session.png)
+
+**Review the Express order**
+
+![Express checkout reaches order review after verification](docs/screenshots/express-review.png)
+
+**Confirm the Express order**
+
+![Completed Express order for paid-latest](docs/screenshots/express-confirmed.png)
+
+</details>
 
 ## Quick start
 
@@ -27,6 +66,19 @@ npm run dashboard
 
 To run alongside another copy, use `npm run init:demo -- 8016` in the fresh copy, set a unique `COMPOSE_PROJECT_NAME` in that shell, and launch the dashboard with `REHEARSAL_DASHBOARD_PORT=4185 npm run dashboard`. Use `docker compose down` to stop the stack and keep its database volume. Stop the dashboard with Ctrl+C.
 
+<details>
+<summary>See the dashboard before and during a run</summary>
+
+**Before the first run**
+
+![Dashboard ready to start the checkout rehearsal](docs/screenshots/dashboard-ready.png)
+
+**During a rerun**
+
+![Dashboard showing the running status and previous results](docs/screenshots/dashboard-running.png)
+
+</details>
+
 ## Reproduce and fix the regression
 
 The Boolean flag `express_checkout` defaults to **Off** in both environments. Current has no overrides. Proposed starts with two overlapping overrides in this order:
@@ -43,6 +95,27 @@ Flagsmith uses the first matching override. Both match `paid-older`, so the brok
 3. Drag **Older app version** by its name above **Paid plan**. Keep **Older app version** Off and **Paid plan** On. Click **Update Segment Overrides** and wait for the save to finish.
 4. Rerun with the same dashboard button or CLI command. To repeat, move **Paid plan** back to the top and save. The demo seed also supports `npm run setup:flagsmith -- fixed` and `npm run setup:flagsmith -- broken`.
 
+<details>
+<summary>Inspect the matching rules and the failed checkout</summary>
+
+The Proposed flag editor lists **Paid plan** above **Older app version** before the fix.
+
+![Flagsmith segment override rows in their broken priority order](docs/screenshots/flagsmith-overrides.png)
+
+The dashboard shows the flag value in each environment and the two overrides that matched `paid-older`. **Paid plan** won in Proposed.
+
+![Flag decision panel showing Current Off and Proposed On with Paid plan taking precedence over Older app version](docs/screenshots/matching-rules.png)
+
+The browser reached **Verify Express session**, where the older client could not continue.
+
+![Express checkout displaying the session verification failure for app version 1](docs/screenshots/express-failure.png)
+
+The failure inspector keeps the error, screenshot, and trace download together.
+
+![Dashboard inspector for paid-older showing the failed step and Playwright evidence](docs/screenshots/failure-inspector.png)
+
+</details>
+
 Observed on a fresh local stack:
 
 | Profile | Traits | Current, both runs | Proposed, broken | Proposed, fixed |
@@ -51,6 +124,13 @@ Observed on a fresh local stack:
 | `paid-latest` | Paid, app v2 | Classic · pass | Express · pass | Express · pass |
 | `paid-older` | Paid, app v1 | Classic · pass | Express · fails at **Verify Express session** | Classic · pass |
 | **Total** | | **3/3** | **2/3** | **3/3** |
+
+<details>
+<summary>See the dashboard after changing the rule order</summary>
+
+![Fixed comparison showing all six checkouts passing, with paid-older on Classic and paid-latest on Express in Proposed](docs/screenshots/checkout-fixed.png)
+
+</details>
 
 | CLI exit | Meaning |
 | --- | --- |
@@ -119,6 +199,27 @@ Both flags default off. Proposed enables `new_onboarding` for Paid plan. Both en
 | starter (free, v2) | Classic, saving off · pass | Classic, off · pass | Classic, off · pass |
 | pilot (paid, v1) | Classic, saving on · pass | New, on · pass | New, on · pass |
 | team (paid, v2) | Classic, saving off · pass | New, off · **cannot save workspace progress** | New, on · pass |
+
+<details>
+<summary>Tour the independent onboarding website</summary>
+
+**Current · Classic flow**
+
+![Classic onboarding with the demo workspace name entered](docs/screenshots/onboarding-classic.png)
+
+**Proposed · new flow**
+
+![New onboarding with the same workspace name entered](docs/screenshots/onboarding-new.png)
+
+**Saving disabled**
+
+![New onboarding reports that it cannot save workspace progress](docs/screenshots/onboarding-blocked.png)
+
+**Saving enabled**
+
+![Workspace ready confirmation after the new flow resumes](docs/screenshots/onboarding-complete.png)
+
+</details>
 
 To bring your own app, copy [the onboarding journey](examples/onboarding/journey.ts), change its URLs, synthetic identities, and browser steps, then import it in [the registry](rehearsal.config.ts). The [example app](examples/onboarding/main.ts) and its [two preview servers](examples/onboarding/serve.ts) illustrate the target-side SDK integration. Checkout remains the default CLI and dashboard journey.
 
