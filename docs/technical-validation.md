@@ -29,3 +29,11 @@ Failure images and traces are next to their reports. The three-flag proof is in 
 - Repeating with `--cleanup-failure` produced a failed cleanup in `explore-3066aa55-205d-4055-b400-068210595993/report.json`. A new process ran `npm run explore -- --recover` and verified the resource was gone. Dashboard cancellation and an overlapping request were also exercised against self-hosted Flagsmith.
 - The earlier hosted Checkout workflow used revision `b34d802`. The broken job failed at rehearsal and uploaded its report, screenshot, and trace. The fixed job passed and uploaded its report. [Broken hosted run](https://github.com/krishh0310/flagsmith-/actions/runs/45763576595) · [Fixed hosted run](https://github.com/krishh0310/flagsmith-/actions/runs/45763580691)
 - Suggested repository metadata and package scope are in the [release candidate note](release-candidate.md).
+
+## README capture verification
+
+The documentation capture used a clean source copy and a disposable local stack. The dashboard ran broken and fixed Checkout, fixed Onboarding, broken and fixed Pricing, and the four-case Explorer plan. The Pricing capture showed **16/16 Current** and **9/16 Proposed** before the fix, then **16/16** in both environments. The Risk Map combined broken Checkout, fixed Onboarding, and broken Pricing and showed **22/22 evaluated**, **8 regressions**, and **8 affected synthetic profiles**. These counts apply to this captured run. Earlier real Pricing runs assigned different identities to the weighted variants.
+
+The screenshots show the actual local application. The hosted CI screenshot shows the public Checkout workflow listing for the earlier runs linked above. The SVGs depict the workflows and observations as diagrams.
+
+Build and type checking passed, along with 17 unit tests and 10 Playwright tests. The integration suite passed after recreating the disposable database. Two attempts on the already-fixed Onboarding fixture returned exit 0 where the broken test expected exit 1. The pinned server's PATCH behavior retains omitted overrides. [Resetting the fixture](developer-guide.md#onboarding-and-explorer)
