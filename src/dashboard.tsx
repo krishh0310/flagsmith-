@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { DashboardRun, DashboardState } from '../scripts/dashboard-api.ts';
 import type { ProfileExplanation } from '../scripts/flag-explanation.ts';
-import { environments, type CaseResult } from '../scripts/rehearsal-results.ts';
+import { environments, flagValueLabel, type CaseResult } from '../scripts/rehearsal-results.ts';
 import './dashboard.css';
 
 const outcomeLabels = { pass: 'Pass', fail: 'Fail', 'setup-error': 'Setup error' };
@@ -88,7 +88,7 @@ function Evidence({ id, result }: { id: string; result: CaseResult }) {
       {evidence?.screenshot && (
         <figure>
           <a href={base + encodeURIComponent(evidence.screenshot)} target="_blank" rel="noreferrer">
-            <img src={base + encodeURIComponent(evidence.screenshot)} alt={`Checkout failure for ${profile} in ${environment}`} />
+            <img src={base + encodeURIComponent(evidence.screenshot)} alt={`Journey failure for ${profile} in ${environment}`} />
           </a>
           <figcaption>Select the screenshot to open it at full size.</figcaption>
         </figure>
@@ -114,12 +114,15 @@ function Comparison({ run }: { run: DashboardRun }) {
     report.cases.filter((item) => item.environment === environment && item.outcome === 'pass').length,
   );
   const total = report.comparisons.length;
+  const flagNames = report.flagNames ?? [...new Set(report.cases.flatMap(({ observedFlags }) =>
+    Object.keys(observedFlags ?? {}),
+  ))];
 
   return (
     <>
       <div className="table-wrap">
         <table>
-          <caption>Checkout comparison</caption>
+          <caption>{report.journeyName ?? (report.journey === 'checkout' ? 'Checkout' : report.journey ?? 'Checkout')} comparison</caption>
           <thead>
             <tr>
               <th scope="col">Customer profile</th>
@@ -149,11 +152,21 @@ function Comparison({ run }: { run: DashboardRun }) {
                             <button type="button" className="inspect"
                               aria-label={`Inspect ${profile} ${environment} failure`}
                               onClick={() => { setExplaining(undefined); select(result); }}>
-                              Inspect failure
+                              {result.outcome === 'setup-error' ? 'Inspect setup error' : 'Inspect failure'}
                             </button>
                           )}
                         </>
                       ) : 'Unavailable'}
+                      {flagNames.length > 0 && (
+                        <dl className="observed-flags">
+                          {flagNames.map((name) => (
+                            <div key={name}>
+                              <dt><code>{name}</code></dt>
+                              <dd>{flagValueLabel(result?.observedFlags?.[name])}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
                     </td>
                   );
                 })}
@@ -182,6 +195,8 @@ function Comparison({ run }: { run: DashboardRun }) {
 
 function Dashboard() {
   const [state, setState] = useState<DashboardState>();
+  const [journey, setJourney] = useState('');
+  const [archived, setArchived] = useState<DashboardRun>();
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const revision = useRef(0);
@@ -197,7 +212,6 @@ function Dashboard() {
         const status: DashboardState = await response.json();
         if (!controller.signal.aborted && requestRevision === revision.current) {
           setState(status);
-          setError('');
         }
       } catch {
         if (!controller.signal.aborted && requestRevision === revision.current) {
@@ -216,25 +230,49 @@ function Dashboard() {
     setSubmitting(true);
     setError('');
     try {
-      const response = await fetch('/api/rehearsal', { method: 'POST' });
-      if (response.status !== 202 && response.status !== 409) throw new Error('Start request failed.');
+      const response = await fetch('/api/rehearsal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ journey: journey || state?.defaultJourney }),
+      });
+      if (response.status !== 202 && response.status !== 409) {
+        const body = await response.json();
+        throw new Error(body.error ?? 'Start request failed.');
+      }
+      setArchived(undefined);
       const status = await fetch('/api/rehearsal');
       if (!status.ok) throw new Error('Status request failed.');
       const snapshot: DashboardState = await status.json();
       revision.current++;
       setState(snapshot);
-    } catch {
-      setError('Could not start the rehearsal. Check that the local API is running.');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Could not start the rehearsal.');
     } finally {
       setSubmitting(false);
     }
   }
 
+  async function openReport(id: string) {
+    setError('');
+    if (!id) {
+      setArchived(undefined);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/rehearsals/${encodeURIComponent(id)}/report`);
+      if (!response.ok) throw new Error('Report unavailable.');
+      setArchived({ id, report: await response.json() });
+    } catch {
+      setError('Could not open the saved report.');
+    }
+  }
+
   const busy = submitting || state?.phase === 'running';
-  const run = state?.latest;
-  const runError = state?.error || run?.report.runErrors[0];
-  const status = busy ? 'Rehearsal running' : run?.report.exitCode === 0 ? 'All profiles passed' :
-    run?.report.exitCode === 1 ? 'Regression detected' : state?.phase === 'setup-error' ?
+  const run = archived ?? state?.latest;
+  const apiError = archived ? undefined : state?.error;
+  const runError = apiError || run?.report.runErrors[0];
+  const status = busy ? 'Rehearsal running' : apiError ? 'Setup error' : run?.report.exitCode === 0 ? 'All profiles passed' :
+    run?.report.exitCode === 1 ? 'Regression detected' : run?.report.exitCode === 2 ?
       (runError || run?.report.cases.some(({ outcome }) => outcome === 'setup-error') ? 'Setup error' : 'Invalid comparison') :
       state ? 'Ready to rehearse' : 'Connecting to the local API';
 
@@ -249,22 +287,41 @@ function Dashboard() {
       <main className="wrap">
         <div className="page-heading">
           <div>
-            <h1>Checkout rehearsal</h1>
-            <p>Run the same checkout journey in Current and Proposed.</p>
+            <h1>Journey rehearsal</h1>
+            <p>Compare browser outcomes in Current and Proposed.</p>
           </div>
-          <button type="button" className="run" disabled={busy || !state} onClick={start}>
-            {busy ? 'Running rehearsal…' : 'Run Rehearsal'}
-          </button>
+          <div className="run-controls">
+            <div className="journey-picker">
+              <label htmlFor="journey">Journey</label>
+              <select id="journey" value={journey || state?.defaultJourney || ''} disabled={busy || !state}
+                onChange={(event) => setJourney(event.target.value)}>
+                {state?.journeys.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+              </select>
+            </div>
+            <button type="button" className="run" disabled={busy || !state} onClick={start}>
+              {busy ? 'Running rehearsal…' : 'Run Rehearsal'}
+            </button>
+          </div>
         </div>
         <section className="result" data-state={busy ? 'running' : run?.report.exitCode ?? state?.phase}>
           <p className="run-status" role="status">{status}</p>
           {error && <p role="alert">{error}</p>}
           {!busy && runError && <p role="alert">{runError}</p>}
           {!busy && state?.phase === 'empty' && (
-            <p className="empty-text">Run a rehearsal to see checkout results and failure evidence for all three profiles.</p>
+            <p className="empty-text">Run a rehearsal to see results and failure evidence for each profile.</p>
           )}
           {busy && run && <p className="empty-text">Showing the previous completed run while this rehearsal runs.</p>}
         </section>
+        {state && state.runs.length > 0 && (
+          <div className="saved-runs">
+            <label htmlFor="saved-run">View report</label>
+            <select id="saved-run" disabled={busy} value={archived?.id ?? ''} onChange={(event) => void openReport(event.target.value)}>
+              <option value="">Latest run</option>
+              {state.runs.map(({ id, name, startedAt }) =>
+                <option key={id} value={id}>{name} · {new Date(startedAt).toLocaleTimeString()}</option>)}
+            </select>
+          </div>
+        )}
         {run && <Comparison key={run.id} run={run} />}
       </main>
     </>

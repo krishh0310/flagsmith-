@@ -12,17 +12,25 @@ export const dashboardHost = `127.0.0.1:${dashboardPort}`;
 const allowedHosts = new Set([dashboardHost, `localhost:${dashboardPort}`]);
 
 export type DashboardRun = { id: string; report: RehearsalReport };
+export type JourneyOption = { id: string; name: string };
 export type DashboardState = {
+  journeys: JourneyOption[];
+  defaultJourney: string;
+  runs: { id: string; name: string; startedAt: string }[];
   phase: 'empty' | 'running' | 'completed' | 'setup-error';
   latest: DashboardRun | null;
   error?: string;
   flagsmithUrl?: string;
 };
 
-export function createDashboardApi(run: () => Promise<RehearsalRun>, flagsmithUrl = 'http://localhost:8000') {
+export function createDashboardApi(
+  run: (journey: string) => Promise<RehearsalRun>,
+  options: { journeys: JourneyOption[]; defaultJourney: string; flagsmithUrl?: string },
+) {
+  const { journeys, defaultJourney, flagsmithUrl = 'http://localhost:8000' } = options;
   const api = Fastify();
   const knownRuns = new Map<string, RehearsalRun>();
-  let state: DashboardState = { phase: 'empty', latest: null };
+  let state: Pick<DashboardState, 'phase' | 'latest' | 'error'> = { phase: 'empty', latest: null };
 
   api.addHook('onRequest', async (request, reply) => {
     const { host, origin } = request.headers;
@@ -38,16 +46,28 @@ export function createDashboardApi(run: () => Promise<RehearsalRun>, flagsmithUr
   });
 
   api.get('/api/rehearsal', async (_request, reply) => {
-    return reply.header('Cache-Control', 'no-store').send({ ...state, flagsmithUrl });
+    return reply.header('Cache-Control', 'no-store').send({
+      ...state, flagsmithUrl, journeys, defaultJourney,
+      runs: Array.from(knownRuns, ([id, { report }]) => ({
+        id, name: report.journeyName ?? report.journey ?? 'Checkout', startedAt: report.startedAt,
+      })).reverse(),
+    });
   });
 
-  api.post('/api/rehearsal', async (_request, reply) => {
+  api.post<{ Body: { journey?: unknown } }>('/api/rehearsal', async ({ body }, reply) => {
+    if (body !== undefined && (!body || typeof body !== 'object' || Array.isArray(body))) {
+      return reply.code(400).send({ error: 'Send a JSON object with a journey ID.' });
+    }
+    const journey = body?.journey === undefined ? defaultJourney : body.journey;
+    if (typeof journey !== 'string' || !journeys.some(({ id }) => id === journey)) {
+      return reply.code(400).send({ error: 'Unknown journey. Select a registered journey.' });
+    }
     if (state.phase === 'running') {
       return reply.code(409).send({ error: 'A rehearsal is already running.' });
     }
 
     state = { phase: 'running', latest: state.latest };
-    void Promise.resolve().then(run).then((completed) => {
+    void Promise.resolve().then(() => run(journey)).then((completed) => {
       const id = basename(completed.directory);
       knownRuns.set(id, completed);
       state = {
@@ -56,7 +76,7 @@ export function createDashboardApi(run: () => Promise<RehearsalRun>, flagsmithUr
       };
     }).catch((error) => {
       state = {
-        phase: 'setup-error', latest: null,
+        phase: 'setup-error', latest: state.latest,
         error: `Could not complete the rehearsal. ${errorMessage(error)}`,
       };
     });

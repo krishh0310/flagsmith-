@@ -167,7 +167,7 @@ export async function runRehearsal(journey: string, registration: JourneyRegistr
   const terminal = summary.join('\n') + '\n';
   const after = explainFlag && before ? await readFlagRules(explainFlag) : undefined;
   const flagExplanation = explainFlag ? buildExplanation(explainFlag, before, after, cases, profileIds) : undefined;
-  const report = { journey, startedAt, exitCode, status, cases, comparisons: comparison.profiles, runErrors, flagExplanation };
+  const report = { journey, journeyName: registration.name, flagNames: registration.flagNames, startedAt, exitCode, status, cases, comparisons: comparison.profiles, runErrors, flagExplanation };
   await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
   await writeFile(join(directory, 'summary.txt'), terminal);
   return { directory, report, terminal };

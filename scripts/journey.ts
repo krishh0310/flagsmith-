@@ -18,6 +18,8 @@ export type JourneyContext = {
 };
 
 export type JourneyRegistration = {
+  name?: string;
+  flagNames?: readonly string[];
   identities: readonly Identity[];
   urls?: Record<Environment, string>;
   explainFlag?: string;

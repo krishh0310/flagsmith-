@@ -16,7 +16,9 @@ export type CaseResult = {
 };
 
 export type RehearsalReport = {
-  journey: string;
+  journey?: string;
+  journeyName?: string;
+  flagNames?: readonly string[];
   startedAt: string;
   exitCode: number;
   status: string;
@@ -49,4 +51,8 @@ export function compare(cases: CaseResult[], profileIds: readonly string[]) {
 
 export function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+export function flagValueLabel(value: boolean | undefined) {
+  return value === true ? 'On' : value === false ? 'Off' : 'Unavailable';
 }

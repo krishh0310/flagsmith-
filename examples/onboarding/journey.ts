@@ -2,6 +2,8 @@ import { expect } from '@playwright/test';
 import type { JourneyRegistration } from '../../scripts/journey.ts';
 
 export const onboarding: JourneyRegistration = {
+  name: 'Onboarding',
+  flagNames: ['new_onboarding', 'save_onboarding_progress'],
   urls: { Current: 'http://127.0.0.1:4181', Proposed: 'http://127.0.0.1:4182' },
   identities: [
     { id: 'starter', traits: { plan: 'free', app_version: 2 } },
