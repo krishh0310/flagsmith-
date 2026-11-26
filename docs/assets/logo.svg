@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
-<title id="title">Flag Rehearsal mark</title><desc id="desc">An original flag and verification check inside a shield.</desc>
-<defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 6 3 0 6Z" fill="context-stroke"/></marker></defs>
-<g transform="translate(0 0) scale(1)"><path d="M32 5 56 14v16c0 13-9 23-24 30C17 53 8 43 8 30V14Z" fill="none" stroke="#34D399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 39V19m0 1h10l7 5v8l-7-4H23" fill="none" stroke="#F8FAFC" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="m28 39 5 5 11-10" fill="none" stroke="#34D399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></g>
+<title id="title">Flag Rehearsal</title>
+<desc id="desc">A verification check and a flag inside a shield.</desc>
+<path d="M32 3 56 12v17c0 14-9 24-24 32C17 53 8 43 8 29V12Z" fill="#111827" stroke="#34D399" stroke-width="4"/><path d="M22 43V17h19l-5 7 5 7H22" stroke="#F8FAFC" stroke-width="3.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/><path d="m29 41 5 5 13-14" stroke="#34D399" stroke-width="4" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
 </svg>

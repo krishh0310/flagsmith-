@@ -1,95 +1,105 @@
-# Flag Rehearsal
+<h1 align="center"><img src="docs/assets/hero-banner.svg" width="1200" alt="Flag Rehearsal — Rehearse the rollout. Not the outage. Pre-release configuration safety for Flagsmith."></h1>
 
 <p align="center">
-  <img src="docs/assets/hero-banner.svg" alt="Flag Rehearsal. Rehearse the rollout. Not the outage. Compare Current and Proposed checkout journeys before changing Flagsmith flags." width="1200">
+  <img src="docs/assets/stack-badges.svg" width="620" alt="Flagsmith 2.295.2 · Playwright · TypeScript · Docker Compose · MIT">
 </p>
 
 <p align="center">
-  <a href="https://docs.flagsmith.com/"><img src="https://img.shields.io/badge/Flagsmith-self--hosted-10B981" alt="Self-hosted Flagsmith"></a>
-  <a href="https://playwright.dev/"><img src="https://img.shields.io/badge/Playwright-Chromium-8B5CF6" alt="Playwright with Chromium"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-475569" alt="MIT License"></a>
+  <a href="#overview">Overview</a> · <a href="#features">Features</a> · <a href="#quick-start">Quick Start</a> · <a href="#demo-walkthrough">Try the demo</a> · <a href="#architecture">Architecture</a> · <a href="#validation">Validation</a> · <a href="#integration">Integration</a>
 </p>
-
-[Overview](#overview) · [Features](#features) · [Quick Start](#quick-start) · [How It Works](#how-it-works) · [Architecture](#architecture) · [Validation](#validation) · [Integration](#integration)
 
 ## Overview
 
-Flag Rehearsal helps engineering teams run the same browser journey against Current and Proposed configurations in self-hosted Flagsmith, so they can see which synthetic customers would hit a regression, where it happens, and which rules explain it.
+Flag Rehearsal lets developers replay a browser journey against **Current** and **Proposed** configurations in self-hosted Flagsmith to see who gets stuck, which flags they received, and whether a configuration change fixes the journey.
 
-A feature flag can change who gets a feature without deploying new application code. In the Checkout demo, the proposed Express rollout gives a paid customer on an older client a checkout flow that their app cannot complete. Flag Rehearsal catches the failure in Chromium and shows which targeting rule won.
+**Feature flags deserve the same testing rigor as code.** A rollout can break an older client even when the build is identical and both targeting rules look right. Rehearsal puts the customer's failed step, the winning rule, and the browser evidence in the same report.
 
-**[Run the local demo](#quick-start)** · [See the 60-second walkthrough](#60-second-walkthrough)
+From a fresh clone with Node.js 24+ and Docker running, start the demo.
 
-![Checkout dashboard showing Current at 3 of 3, Proposed at 2 of 3, and the paid-older regression with controls for evidence and rule explanation](docs/screenshots/checkout-regression.png)
+```sh
+npm run demo
+```
 
-![Two release workflows. Without rehearsal, the journey breaks after release. With rehearsal, the team detects and fixes the regression before release.](docs/assets/problem-solution.svg)
+Open the [local dashboard](http://127.0.0.1:4175) and click **Run Rehearsal**. [Full setup](#quick-start) · [Follow the broken-to-fixed demo](#demo-walkthrough)
 
-### Results at a glance
+![Completed dashboard run. Current passes all three profiles. Proposed fails only paid-older, with buttons to inspect the failure and explain the flag decision.](docs/screenshots/dashboard-overview.png)
 
-![Local Proposed results improve from 2 of 3 to 3 of 3 for Checkout and Onboarding, and from 9 of 16 to 16 of 16 for Pricing. Earlier hosted Checkout runs exited 1 and 0.](docs/assets/validation-overview.svg)
+![Two release paths. Releasing first leaves a broken journey to debug. Rehearsing the proposed configuration lets the team detect and fix it before release.](docs/assets/problem-solution.svg)
 
-The numbers count synthetic profiles in the demonstrated runs. Pricing allocations can differ across independently seeded environments. [Verification commands and earlier runs](docs/technical-validation.md)
+### Verified results at a glance
+
+![Passing synthetic profiles before and after repairing Proposed. Checkout and Onboarding improve from 2/3 to 3/3 and Pricing from 9/16 to 16/16. Earlier hosted Checkout checks failed and then passed.](docs/assets/validation-overview.svg)
+
+| Check | Observed result |
+| --- | --- |
+| Checkout | Current stayed 3/3. Changing only Proposed rule priority recovered the older paid client. |
+| Onboarding and Pricing | Current stayed 3/3 and 16/16 respectively. Enabling saving recovered the new flow. Correcting the pricing Control value recovered every tested price. |
+| Explorer | Two flags yielded 4 assignments and 1 failure. Three flags yielded 8 assignments and 2 failures. Both runs verified cleanup. |
+| Fresh installation and tests | One command started the dashboard on an empty database. Build, type check, 17 unit tests, 10 Playwright tests, and the local integration suite passed. |
+| External application | The registered TodoMVC journey passed 1/1 on both targets in a self-run check. |
+| Hosted CI | Checkout at `b34d802` produced a failed check for broken Proposed and a passing check for fixed Proposed. [Broken run](https://github.com/krishh0310/flagsmith-/actions/runs/45763576595) · [Fixed run](https://github.com/krishh0310/flagsmith-/actions/runs/45763580691) |
 
 ## Features
 
-### Configuration rehearsal
+### 01 · Configuration rehearsal
 
-Run identical Playwright journeys for the same synthetic identities in Current and Proposed. The application uses the real Flagsmith SDK. The comparison identifies regressions, invalid baselines, and setup errors. For Checkout, the explanation shows which matching segment override took precedence and links to the failed step, screenshot, and trace.
+Give both environments the same customers and the same definition of success. Checkout succeeds when the customer reaches order confirmation. The app selects Classic or Express from the SDK response. The report records the variant it rendered.
+
+![Checkout comparison. All three get Classic in Current. In broken Proposed both paid profiles receive Express, and only paid-older fails.](docs/screenshots/checkout-regression.png)
 
 <details>
-<summary>Inspect the rule explanation and browser evidence</summary>
+<summary>See which rule won and where checkout stopped</summary>
 
-![Checkout rule explanation showing Paid plan taking precedence over Older app version for paid-older](docs/screenshots/regression-explanation.png)
+![Saved explanation for paid-older. The off decision in Current and on decision in Proposed agree with the rendered checkouts. Paid plan took precedence over Older app version.](docs/screenshots/regression-explanation.png)
 
-![Failure viewer showing the Verify Express session error, original browser screenshot, and Playwright trace link](docs/screenshots/evidence-viewer.png)
+![Failure viewer for Verify Express session, including the app's version requirement, browser screenshot and trace download.](docs/screenshots/evidence-viewer.png)
 
 </details>
 
-### Automatic Flag Combination Explorer
+### 02 · Automatic Flag Combination Explorer
 
-A set of `n` Boolean flags has `2^n` assignments. Preview the plan before running it. The engine uses exhaustive plans for up to three flags and pairwise plans for larger registered sets. It reports uncovered pairs when limits truncate a plan. The bundled Onboarding adapter exposes three flags. The [developer guide](docs/developer-guide.md) documents planning and execution limits.
+Which settings break onboarding together? Select flags and profiles, then preview the browser cases before running them. For `team`, Explorer generated all four assignments of `new_onboarding` and `save_onboarding_progress`. Only **new flow on + saving off** blocked progress.
 
-Explorer runs in a disposable Flagsmith environment, checks that SDK observations match the applied values, and saves browser evidence. It supports cancellation, verifies disposal, and can recover interrupted runs with an ownership record. The captured two-flag run tested all four combinations for `team` and found one failure. The three-flag test ran all eight and found two failures.
+![Completed Explorer plan for team showing both selected flags, all four browser outcomes, and verified temporary-environment cleanup.](docs/screenshots/combination-explorer.png)
 
-![Completed Explorer run with four exhaustive assignments, a failed Onboarding case, and verified cleanup](docs/screenshots/combination-explorer.png)
+With *n* Boolean flags there are **2ⁿ** assignments. The planner uses exhaustive coverage for one to three flags and pairwise coverage for four to eight registered flags. It caps a run at 16 combinations and 48 planned cases and reports uncovered pairs. The bundled Onboarding adapter exposes three flags. Pairwise and truncated plans are covered by planner tests.
 
-### Dependency investigation
+Explorer writes assignments to a run-owned temporary Flagsmith environment, checks the values the app observed, and verifies disposal. **Cancel Explorer** stops an active run. After an interruption, `npm run explore -- --recover` retries cleanup from the saved ownership record. [Execution limits and recovery](docs/developer-guide.md#onboarding-and-explorer)
 
-Explorer repeats the failing input and then changes one flag at a time. In Onboarding, **New flow on + Saving off** failed for `team`. Turning saving on recovered the new flow. Switching to Classic also recovered the journey, while enabling tips alone still failed in the three-flag run. These observations support a saving dependency for the tested profile and journey.
+### 03 · Dependency investigation
 
-![Three single-flag interventions. Saving on recovered the new flow, switching the new flow off recovered Classic, and turning tips on still failed.](docs/assets/dependency-investigation.svg)
+Explorer first repeats a failing combination. If the failure reproduces, it changes one flag at a time and records the browser outcome for each intervention. In the three-flag run, enabling saving let `team` finish the new flow. Switching back to Classic also worked. Enabling tips alone left the customer stuck.
+
+![Three interventions from the same reproduced onboarding failure. Enabling saving and switching to Classic each recovered the journey. Enabling tips still failed.](docs/assets/dependency-investigation.svg)
 
 <details>
-<summary>View the investigation in the dashboard</summary>
+<summary>Inspect the dashboard evidence for the two-flag investigation</summary>
 
-![Explorer case detail showing the reproduced failure and both successful single-flag changes](docs/screenshots/dependency-investigation.png)
+![Expanded case-2 for team showing the configured and observed flag values, the reproduced failure, and both single-flag recoveries.](docs/screenshots/dependency-investigation.png)
 
 </details>
 
-### Multivariate and remote configuration testing
+### 04 · Multivariate and remote configuration testing
 
-Pricing checks a ₹1,000 base price against approved discounts of 0%, 10%, and 20%. Flagsmith supplies the received value for each synthetic identity, and Playwright validates the price displayed by the app. The broken Proposed Control value of 35% rendered **₹650**. Restoring 0% returned Proposed to **16/16 passing**. The assignment probe confirmed repeat observations within each unchanged environment.
+The Pricing journey checks a ₹1,000 item. The approved values of `pricing_discount` are 0%, 10%, and 20%, with expected prices of ₹1,000, ₹900, and ₹800. Flagsmith assigns each identified browser a value. Playwright checks both the received value and the price the page displays.
 
-<details>
-<summary>View the rejected discount and rendered price</summary>
+The broken Proposed **Control** value was **35%**. Seven of 16 synthetic identities in the captured run saw **₹650**. Restoring Control to 0% brought all 16 back within the price contract. Repeated evaluations were stable within each unchanged environment. The allocation across these 16 identities can vary with a fresh environment. [Run the Pricing example](docs/developer-guide.md#multivariate-pricing)
 
-![Pricing comparison showing an invalid 35 percent Proposed discount and the rendered ₹650 price](docs/screenshots/multivariate-pricing.png)
+![Pricing row for an affected identity. The Proposed SDK supplies 35, the app renders ₹650, and the comparison reports an invalid discount.](docs/screenshots/multivariate-pricing.png)
 
-</details>
+### 05 · Flag Risk Map
 
-### Flag Risk Map
+Choose **Open Flag Risk Map** and select one saved report per journey. The captured map combines broken Checkout, fixed Onboarding, and broken Pricing. It evaluated **22/22 comparisons** and recommended **Hold rollout** for eight affected journey-specific profiles. Open a regression cell to reach the evidence from that run.
 
-Select one saved run per journey to build a map of profile comparisons. The dashboard reports how many comparisons were evaluated and how many synthetic profiles regressed. Open a cell to inspect Current and Proposed outcomes and retrieve their original evidence. The example below combined broken Checkout, fixed Onboarding, and broken Pricing.
+![Flag Risk Map showing 22 evaluated comparisons, eight regressions, the Hold rollout decision, and a matrix across Checkout, Onboarding and Pricing.](docs/screenshots/flag-risk-map.png)
 
-![Flag Risk Map showing 22 of 22 comparisons evaluated, eight regressions, eight affected journey-specific profiles, and a Hold rollout recommendation](docs/screenshots/flag-risk-map.png)
+### 06 · CI/CD release gates
 
-### CI/CD release checks
-
-Use the CLI exit status as an input to a release workflow. The included GitHub Actions Checkout job fails when a Proposed regression occurs and uploads reports, screenshots, and traces when available. A team can use the check in its own merge or release policy. [Workflow](.github/workflows/flag-rehearsal.yml)
+A pipeline can run the same journey as the dashboard. The included GitHub Actions job starts an isolated Flagsmith stack, runs `npm run rehearse`, and uploads the JSON report and available screenshots and traces even when the check fails. A team can require this check before merge or deployment. [CLI exits and artifact names](#integration) · [Workflow definition](.github/workflows/flag-rehearsal.yml)
 
 ## Quick Start
 
-Use **Node.js 24+ with npm**, **Git**, a POSIX shell, and a running Docker Engine or Docker Desktop with **Compose 2.20+**. Keep ports **4175** and **8000** free.
+Install **Git**, **Node.js 24 or later with npm**, and **Docker Engine or Docker Desktop with Compose 2.20+**. Start Docker and use a POSIX shell. The default services need local ports **4175** and **8000**.
 
 ```sh
 git clone https://github.com/krishh0310/flagsmith-.git
@@ -97,108 +107,108 @@ cd flagsmith-
 npm run demo
 ```
 
-The command installs locked dependencies and Chromium, starts self-hosted Flagsmith and PostgreSQL, waits for migrations, and seeds the Checkout sample. It creates a Git-ignored `.env` with local credentials and SDK keys.
+On first launch, the command installs locked dependencies and Chromium, starts PostgreSQL and Flagsmith, waits for migrations, creates the **Flag Rehearsal** project and both environments, and seeds broken Checkout. It generates credentials and fills in the two public SDK keys in a Git-ignored `.env`. Subsequent launches preserve the saved Checkout order.
 
-Open the [local dashboard](http://127.0.0.1:4175), keep **Checkout** selected, and click **Run Rehearsal**. Stop the dashboard with **Ctrl+C**, then run `docker compose down` to stop Flagsmith and retain its database. [Installation, configuration, and troubleshooting](docs/installation.md)
+Open the [Flag Rehearsal dashboard](http://127.0.0.1:4175). **Ready to rehearse** means the dashboard is ready for its first run. The separate [Flagsmith dashboard](http://localhost:8000) is where you edit rules. To stop, press **Ctrl+C** in the demo terminal, then run `docker compose down` in the clone to retain the database. [Environment settings, port overrides, Linux browser dependencies and troubleshooting](docs/installation.md)
 
-<details>
-<summary>Preview the dashboard before the first run</summary>
+### Demo walkthrough
 
-![Flag Rehearsal dashboard ready to run the Checkout journey](docs/screenshots/dashboard-overview.png)
-
-</details>
-
-### 60-second walkthrough
-
-1. Run **Checkout** on the seeded broken configuration. **Current** passes 3/3 and **Proposed** passes 2/3.
-2. On the `paid-older` row, click **Explain this regression**, then **Open failure screenshot**. The **Paid plan** override sent the older app to Express, where it failed **Verify Express session**.
-3. Click **Open Flagsmith** and sign in with the local admin settings from `.env`. Open **Flag Rehearsal → Environments → Proposed → Features → express_checkout → Segment Overrides**. Drag **Older app version** by its name above **Paid plan**, then click **Update Segment Overrides**. Keep their values **Off** and **On**, respectively.
-4. Return to the dashboard and click **Run Rehearsal** again. Both environments pass **3/3**. `paid-older` now completes Classic while `paid-latest` keeps Express. The rule order was the only change.
-
-To restore the broken sample, run `npm run setup:flagsmith -- broken` from the repository root with Flagsmith running.
+1. **Rehearse Checkout.** With **Checkout** selected, click **Run Rehearsal**. On a fresh install Current passes 3/3 and Proposed passes 2/3. To restore this starting point on a reused demo, run `npm run setup:flagsmith -- broken` in a second terminal in the clone.
+2. **Inspect the regression.** On the `paid-older` row, click **Explain this regression**, then **Open failure screenshot**. **Paid plan** matched first, so Express reached **Verify Express session** on a client that lacks the required capability. **Inspect failure** also offers **Download Playwright trace**.
+3. **Explore a second failure.** Open **Explore flag combinations**. Leave only `team` checked under **Profiles** and only `new_onboarding` and `save_onboarding_progress` under **Boolean flags**. Click **Preview plan → Run Explorer**, then expand **case-2 · team · fail**. Compare the original failure with the rerun that changes saving to on. Explorer uses its own temporary environment.
+4. **Fix Checkout in Flagsmith.** Click **Open Flagsmith** and sign in using the local admin settings from `.env`. Open **Flag Rehearsal → Environments → Proposed → Features → express_checkout → Segment Overrides**. Drag **Older app version** above **Paid plan** by its name. Keep their values **Off** and **On**, respectively. Click **Update Segment Overrides**.
+5. **Rerun Checkout.** Return to **Checkout → Run Rehearsal**. Both environments now pass **3/3**. In Proposed, `free-latest` stays on Classic, `paid-latest` keeps Express, and `paid-older` completes Classic. **View report** reopens the earlier failure with its original rule order.
 
 <details>
-<summary>View the repaired Checkout comparison</summary>
+<summary>See the fixed result or reproduce the two orders from a terminal</summary>
 
-![Fixed checkout run showing 3 of 3 passes in both environments, paid-older on Classic, and paid-latest on Express in Proposed](docs/screenshots/fixed-configuration.png)
+![Fixed comparison showing all six cases passing, with paid-older on Classic and paid-latest on Express in Proposed.](docs/screenshots/fixed-configuration.png)
 
-</details>
-
-## How It Works
-
-![Workflow from configuring both Flagsmith environments through synthetic browser runs, comparison, investigation, evidence, and a CI result](docs/assets/workflow.svg)
-
-The same application build evaluates flags using the environment’s client-side SDK key and the selected synthetic identity. Playwright starts a fresh Chromium context per case. The runner compares each profile’s Current and Proposed outcomes, keeps evidence, and returns the comparison to the dashboard or CLI.
-
-## Architecture
-
-![Architecture showing the dashboard, CLI and CI sharing the runner. Explorer writes to disposable Flagsmith environments. Browser outcomes feed evidence, the Risk Map and the CI check.](docs/assets/architecture.svg)
-
-React and Fastify provide the local dashboard. The TypeScript registry associates each journey with target URLs, profiles, and Playwright steps. The shared runner produces the comparison. Explorer adds a guarded management path for temporary environments. [Component responsibilities](docs/architecture.md)
-
-## Powered by Flagsmith
-
-Self-hosted Flagsmith supplies separate **Current** and **Proposed** environments. The Checkout SDK sends a synthetic identity with plan and app-version traits. Flagsmith evaluates segments, applies override precedence, and returns the flag decision. Pricing uses the same SDK to read multivariate values. Explorer uses the Management API to create, change, and remove only its disposable environment. [Flagsmith segments and precedence](https://docs.flagsmith.com/flagsmith-concepts/segments#multiple-segment-overrides-for-one-feature) · [Flagsmith Management API](https://docs.flagsmith.com/integrating-with-flagsmith/flagsmith-api-overview/management-api)
-
-## Integration
-
-Run the CLI from the repo root with Flagsmith running:
+Run each line from the clone while Flagsmith is running. The first rehearsal intentionally returns exit 1.
 
 ```sh
+npm run setup:flagsmith -- broken
+npm run rehearse
+npm run setup:flagsmith -- fixed
 npm run rehearse
 ```
 
-| Exit | Meaning |
+</details>
+
+## How it works
+
+![Workflow from rehearsing a proposed change through browser evidence and investigation to a repeat comparison and release decision.](docs/assets/workflow.svg)
+
+A registered journey supplies targets, synthetic identities, and browser steps. The runner opens a fresh Chromium context for each identity in each environment. The demo app evaluates flags before allowing the journey to proceed. A missing decision produces a setup error. When a step fails, the runner captures evidence before closing the context, then compares matching profiles across environments.
+
+### Architecture
+
+![Developer dashboard and CI use the shared runner. The browser requests Flagsmith decisions, outcomes feed comparison and evidence, and Explorer tests interventions in a temporary environment.](docs/assets/architecture.svg)
+
+The React dashboard calls a local Fastify API. The CLI calls the same TypeScript runner directly. Both use the same comparison rules. The Risk Map reads selected reports, so each screenshot and trace belongs to a particular journey and run. [Component responsibilities](docs/architecture.md)
+
+### Powered by Flagsmith
+
+- **Environment and identity.** Self-hosted Flagsmith 2.295.2 stores Current and Proposed in PostgreSQL. The same Checkout build uses the selected environment's SDK key. The official JavaScript SDK sends the identity, plan, and numeric app version.
+- **Targeting and precedence.** A feature flag controls a behavior without a new deployment. Here, `express_checkout` defaults off. The segment rules `plan = paid` and `app_version < 2` both match `paid-older`. Flagsmith resolves their order. Rehearsal saves the order with the report and checks the explanation against the observed decision and UI. An unsupported explanation is labeled **Cause unverified**. [Segment precedence](https://docs.flagsmith.com/flagsmith-concepts/segments#multiple-segment-overrides-for-one-feature)
+- **Remote values and exploration.** Pricing reads the weighted value assigned by Flagsmith. Explorer uses the Management API to provision, configure, and remove a temporary environment. This lets each browser exercise the actual SDK path while preserving the two rollout environments. [Management API](https://docs.flagsmith.com/integrating-with-flagsmith/flagsmith-api-overview/management-api)
+
+## Integration
+
+Run `npm run rehearse` for Checkout or pass the registered journey name, for example `npm run rehearse -- pricing` after seeding Pricing. The CLI writes `report.json`, `summary.txt`, and available failure evidence into a new `rehearsal-runs/run-*/` directory.
+
+| CLI exit | Release check |
 | --- | --- |
-| `0` | All comparisons passed. |
-| `1` | A journey passed in Current and regressed in Proposed. |
-| `2` | Setup failed or the comparison was incomplete or invalid. |
+| `0` | Every matched profile passed in both environments. |
+| `1` | A profile passed in Current and failed in Proposed. |
+| `2` | Setup error, missing result, or invalid baseline. These take precedence over a regression. |
 
-Reports and failure artifacts are written to `rehearsal-runs/`. Use **View report** for previous dashboard runs in the same session. The GitHub Actions workflow uploads available artifacts even when a comparison fails.
+On GitHub, open the workflow run's **Artifacts** section. The Checkout upload is named `flag-rehearsal-broken` or `flag-rehearsal-fixed`. The integration job uploads `flag-rehearsal-integrations`. To adapt it, register your targets and identities, start any required apps, and change the check to your journey command. Keep the CLI exit status and the `always()` artifact upload. [Example workflow](.github/workflows/flag-rehearsal.yml)
 
-### What the runner adds to browser tests
+### What Flag Rehearsal adds to Playwright
 
-| Capability | A general browser suite | Flag Rehearsal |
+| Capability | In a general Playwright suite | In Flag Rehearsal |
 | --- | --- | --- |
-| Browser journeys and evidence | Browser automation and traces | Uses Playwright |
-| Flag comparison and synthetic targeting | Configure targets and identities per suite | Registers one journey for both environments |
-| Boolean combinations and investigation | Implement a planner and interventions | Generates bounded plans and verifies single-flag reruns |
-| Remote values, risk, and CI | Write assertions and reporting | Records values, compares outcomes, and returns a CI exit code |
+| Browser steps, screenshots and traces | Built-in primitives | Registered journeys and run-linked evidence |
+| Compare environments and synthetic identities | Configure targets and match cases | Shared Current/Proposed runner |
+| Exhaustive or pairwise flag coverage | Supply a generator and flag fixtures | Bounded Explorer with temporary environments |
+| Investigate dependencies | Write controlled reruns | Reproduce failure, flip one flag, retain observation |
+| Validate remote values | Assert against an app-specific contract | Journey records SDK values, expected and rendered prices |
+| Assess release risk | Aggregate results and define a CI policy | Cross-journey map, JSON report and documented exit codes |
 
 ### Bring your own application
 
-Register Current and Proposed URLs, a set of synthetic identities and traits, and a Playwright callback. Checkout, SaaS Onboarding, and Pricing are demonstrated here. The same pattern can be applied to payment changes, enterprise overrides, and legacy-client compatibility. The TodoMVC adapter passed 1/1 on both targets in a self-run validation against a pinned upstream revision. Independent developer review remains open. [Journey registry](rehearsal.config.ts) · [Developer guide](docs/developer-guide.md) · [External application validation](docs/real-world-validation.md)
+Register two reachable URLs, stable identities with optional traits, and a Playwright callback in the journey registry. Mark setup and assertion steps and record the variant or remote value that the app actually observed. [Registry](rehearsal.config.ts) · [Journey contract](scripts/journey.ts) · [Onboarding example and commands](docs/developer-guide.md#onboarding-and-explorer)
+
+The external **TodoMVC** adapter exercises task creation, completion, and filtering on a pinned upstream application. After starting the two local targets as documented, run `npm run rehearse -- todomvc`. Both targets passed 1/1. This checks runner portability. Independent developer adoption remains unverified. [Reproduce the external validation](docs/real-world-validation.md)
+
+Checkout migrations, SaaS onboarding, and weighted pricing are demonstrated here. Payment changes, gradual rollouts, enterprise overrides, and customer-segment compatibility checks are further applications for teams that register the relevant journeys and profiles.
 
 ## Validation
 
-- **Local.** A clean-source quickstart ran the real dashboard for the screenshots above. The candidate’s Checkout, Onboarding, Pricing, Explorer, and Risk Map have local verification evidence. [Detailed results and reproducible commands](docs/technical-validation.md)
-- **Hosted.** Both Checkout outcomes ran on GitHub Actions at `b34d802`. The broken job failed at rehearsal and uploaded the report, screenshot, and trace. The repaired job passed. The newer integration suite was run locally. [Broken hosted run](https://github.com/krishh0310/flagsmith-/actions/runs/45763576595) · [Fixed hosted run](https://github.com/krishh0310/flagsmith-/actions/runs/45763580691)
-- **Timing.** In three paired local trials, the median was 1.320 s for a scripted browser checklist and 1.854 s for Rehearsal. The runner was slower in this comparison. Its added work includes systematic comparison and rule evidence. Human hands-on timing remains open. [Benchmark method and measurements](docs/benchmark.md)
+The dashboard captures use a clean local clone with fresh credentials and a new database. Hosted evidence covers the two earlier Checkout runs. The newer integration suite has local verification. [Commands, results and capture provenance](docs/technical-validation.md)
+
+In three paired local trials, a scripted browser checklist took **1.320 s** at the median and Rehearsal took **1.854 s**. Both found the same regression and saved a screenshot and trace. Rehearsal also starts previews, compares profiles, and collects rule evidence. Human hands-on time remains unmeasured. [Method and raw timings](docs/benchmark.md)
 
 <details>
-<summary>View the two hosted Checkout results</summary>
+<summary>View the earlier hosted Checkout checks</summary>
 
-![Public GitHub Actions workflow listing showing the successful fixed Checkout run and failed broken run](docs/screenshots/ci-results.png)
+![GitHub Actions listing showing the failed broken Checkout workflow and successful fixed workflow.](docs/screenshots/ci-results.png)
 
 </details>
 
-## Project structure and contributing
+### Known limitations
 
-- [`src/`](src/) contains the dashboard and Checkout app.
-- [`scripts/`](scripts/) contains the CLI, runner, analysis, and setup.
-- [`examples/`](examples/) contains Onboarding, Pricing, and the pinned TodoMVC adapter.
-- [`docs/`](docs/) contains installation, architecture, and validation evidence.
+Coverage depends on registered journeys and synthetic identities. Exhaustive coverage grows exponentially. Pairwise plans can miss higher-order interactions, and a recovered single-flag intervention supports a hypothesis only for the tested conditions. A **Hold rollout** recommendation needs a team's release policy to enforce it.
 
-For changes to a journey or flag fixture, include reproduction steps and the observed CLI exit or report. Run the applicable build, type check, and tests. [Contributor checks](docs/developer-guide.md#reports-and-checks)
-
-## Known limitations
-
-Coverage depends on the journeys and synthetic identities supplied. Pairwise mode can miss higher-order interactions. A verified single-flag recovery applies to the tested configuration, and a Risk Map recommendation requires an external policy to block release. Dashboard report selection is session-scoped, with artifacts retained on disk. Run the integration suite on a fresh demo database. On Flagsmith 2.295.2, the broken Onboarding seed preserves an existing Paid plan override after a fixed run. [Reset details](docs/developer-guide.md#onboarding-and-explorer)
+The dashboard lists runs from its current session. Reports stay on disk. Use a fresh database for repeated integration suites. On Flagsmith 2.295.2, reseeding broken Onboarding after a fixed run retains an existing **Paid plan** override. [Exact reset steps](docs/developer-guide.md#onboarding-and-explorer)
 
 ## Built for the Flagsmith Hackathon — Track 03
 
-Flag Rehearsal extends self-hosted open-source Flagsmith with a reusable dashboard, CLI, and release check. Teams can rehearse changes to targeting and remote values in a browser before exposing them to users. [Toggle Wars Track 03](https://www.wemakedevs.org/hackathons/flagsmith) · [Submission summary](SUBMISSION.md)
+Flag Rehearsal extends open-source Flagsmith with a reusable dashboard and CLI for testing proposed rollouts. Teams can take a targeting rule or flag interaction, see its effect in a real browser, fix it in Flagsmith, and run the same check on their own application. [Toggle Wars](https://www.wemakedevs.org/hackathons/flagsmith) · [Submission summary](SUBMISSION.md)
 
-## Credits and license
+## Contributing and license
 
-Built by **Sai Krish Karthik**. Flag Rehearsal is released under the MIT License. The TodoMVC example preserves its upstream attribution. [MIT License](LICENSE) · [TodoMVC notice](examples/todomvc/LICENSE.upstream.md) · [Reusable project logo](docs/assets/logo.svg)
+For a journey or fixture change, include reproduction steps and the observed CLI exit or report. Run the build, type check, and applicable tests. [Contributor checks](docs/developer-guide.md#reports-and-checks)
+
+Built by **Sai Krish Karthik** and released under the MIT License. [License](LICENSE) · [Upstream TodoMVC notice](examples/todomvc/LICENSE.upstream.md) · [Product logo](docs/assets/logo.svg)

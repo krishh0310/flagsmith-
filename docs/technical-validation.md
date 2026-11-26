@@ -37,3 +37,18 @@ The documentation capture used a clean source copy and a disposable local stack.
 The screenshots show the actual local application. The hosted CI screenshot shows the public Checkout workflow listing for the earlier runs linked above. The SVGs depict the workflows and observations as diagrams.
 
 Build and type checking passed, along with 17 unit tests and 10 Playwright tests. The integration suite passed after recreating the disposable database. Two attempts on the already-fixed Onboarding fixture returned exit 0 where the broken test expected exit 1. The pinned server's PATCH behavior retains omitted overrides. [Resetting the fixture](developer-guide.md#onboarding-and-explorer)
+
+### Capture provenance for the current README
+
+The nine local application images in the README were recaptured with Playwright at a 1440 × 900 viewport on a fresh clone of `e76624c`, using `npm run demo` with a new Compose project and empty database. Detail images crop to the actual DOM element. The overview shows completed Checkout. The Pricing crop shows the affected `pricing-03` row. The existing hosted workflow image is separate.
+
+| Local evidence | Run ID |
+| --- | --- |
+| Dashboard Checkout, broken → fixed | `run-2026-11-26T07-00-53-821Z-2H0vEO` → `run-2026-11-26T07-01-01-260Z-HGeHY1` |
+| Risk Map source for fixed Onboarding | `run-2026-11-26T07-01-03-959Z-9YUXO7` |
+| Dashboard Pricing, broken → fixed | `run-2026-11-26T07-01-05-758Z-qZEEWA` → `run-2026-11-26T07-01-13-091Z-xJYLyK` |
+| Two-flag Explorer screenshot | `explore-472cac21-f6c7-40a6-bcce-552fc7cda3c0` |
+| Three-flag intervention diagram | `explore-c415c7dc-493e-4aff-afa1-15fd6525ef55` |
+| External TodoMVC, 1/1 on both targets | `run-2026-11-26T07-01-58-884Z-WI9MGa` |
+
+The build, type check, 17 unit tests, 10 Playwright checks, and fresh-database integration suite passed in this clone. The same Checkout CLI command returned 1 and then 0. A separate browser pass dragged **Older app version** above **Paid plan** in Flagsmith, saved the order, reran the comparison, downloaded the trace, and reopened the original screenshot after the fix. The Explorer runs returned 1 for the observed failures and recorded verified cleanup. A new clone generates its own run IDs.

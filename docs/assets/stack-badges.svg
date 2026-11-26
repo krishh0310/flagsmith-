@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="34" viewBox="0 0 750 34" role="img" aria-labelledby="title desc">
+<title id="title">Technology and license</title>
+<desc id="desc">Self-hosted Flagsmith 2.295.2, Playwright, TypeScript, Docker Compose and the MIT license.</desc>
+<rect x="1" y="1" width="183" height="32" rx="6" fill="#111827" stroke="#334155"/>
+<circle cx="16" cy="17" r="3" fill="#34D399"/>
+<text x="25" y="23" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="15" font-weight="550" fill="#F8FAFC">Flagsmith 2.295.2</text>
+<rect x="193" y="1" width="130" height="32" rx="6" fill="#111827" stroke="#334155"/>
+<circle cx="208" cy="17" r="3" fill="#8B5CF6"/>
+<text x="217" y="23" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="15" font-weight="550" fill="#F8FAFC">Playwright</text>
+<rect x="332" y="1" width="131" height="32" rx="6" fill="#111827" stroke="#334155"/>
+<circle cx="347" cy="17" r="3" fill="#34D399"/>
+<text x="356" y="23" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="15" font-weight="550" fill="#F8FAFC">TypeScript</text>
+<rect x="472" y="1" width="173" height="32" rx="6" fill="#111827" stroke="#334155"/>
+<circle cx="487" cy="17" r="3" fill="#8B5CF6"/>
+<text x="496" y="23" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="15" font-weight="550" fill="#F8FAFC">Docker Compose</text>
+<rect x="654" y="1" width="94" height="32" rx="6" fill="#111827" stroke="#334155"/>
+<circle cx="669" cy="17" r="3" fill="#34D399"/>
+<text x="678" y="23" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="15" font-weight="550" fill="#F8FAFC">MIT</text>
+</svg>

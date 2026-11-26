@@ -2,11 +2,11 @@
 
 **GitHub description**
 
-Compare feature-flag rollouts in real browsers, explain regressions, and explore flag combinations on self-hosted Flagsmith.
+Pre-release safety for Flagsmith feature flags. Rehearse real user journeys, discover dangerous flag interactions, and detect configuration regressions before rollout.
 
 **Suggested topics**
 
-`flagsmith`, `feature-flags`, `playwright`, `regression-testing`, `developer-tools`, `self-hosted`
+`flagsmith`, `feature-flags`, `feature-management`, `playwright`, `typescript`, `developer-tools`, `regression-testing`, `release-safety`, `ci-cd`, `open-source`, `hackathon`
 
 This candidate adds the Combination Explorer with verified single-flag reruns, weighted pricing checks, a Risk Map of explicitly selected comparisons, a clean-clone demo command, and an external TodoMVC adapter. Review the README's earlier hosted Checkout links and rerun CI on the candidate revision before publishing a release.
 
