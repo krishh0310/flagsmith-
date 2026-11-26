@@ -38,10 +38,10 @@ export function RiskMap({ journeys, runs, investigations }: Pick<DashboardState,
       setLoading(false);
     }
   }
-  return <section>
-    <h2>Flag Risk Map</h2>
+  return <section className="tool-page">
+    <h1>Flag Risk Map</h1>
     <p>Choose one saved comparison per journey. Each row represents a journey-specific synthetic profile.</p>
-    <fieldset disabled={loading}>
+    <fieldset disabled={loading || !runs.length}>
       {journeys.map(journey => <label className="explorer-option" key={journey.id}>{journey.name}{' '}
         <select aria-label={`${journey.name} Risk Map report`} value={selected[journey.id]?.id ?? ''}
           onChange={event => void select(journey.id, event.target.value)}>
@@ -50,6 +50,7 @@ export function RiskMap({ journeys, runs, investigations }: Pick<DashboardState,
             <option value={item.id} key={item.id}>{new Date(item.startedAt).toLocaleTimeString()} · {item.id}</option>)}
         </select></label>)}
     </fieldset>
+    {!runs.length && <p>Run a journey rehearsal to add its report to the map.</p>}
     {error && <p role="alert">{error}</p>}
     {suite.length > 0 && <>
       <p>{evaluated}/{cells.length} profile comparisons evaluated · {regressions} regressions · {regressions} affected journey-specific profiles</p>

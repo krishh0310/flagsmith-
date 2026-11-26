@@ -5,6 +5,7 @@ import type { ProfileExplanation } from '../scripts/flag-explanation.ts';
 import { environments, flagValueLabel, type CaseResult } from '../scripts/rehearsal-results.ts';
 import { RiskMap } from './risk-map.tsx';
 import { Explorer } from './explorer.tsx';
+import { Icon } from './dashboard-icons.tsx';
 import './dashboard.css';
 
 const outcomeLabels = { pass: 'Pass', fail: 'Fail', 'setup-error': 'Setup error' };
@@ -114,6 +115,7 @@ function formatPrice(minor?: number) {
 
 function Comparison({ run }: { run: DashboardRun }) {
   const { id, report } = run;
+  const [regressionsOnly, setRegressionsOnly] = useState(false);
   const [selected, select] = useState<CaseResult>();
   const [explaining, setExplaining] = useState<string>();
   const explanation = report.flagExplanation?.profiles.find(({ profile }) => profile === explaining);
@@ -128,9 +130,16 @@ function Comparison({ run }: { run: DashboardRun }) {
 
   return (
     <>
-      <div className="table-wrap">
-        <table>
-          <caption>{report.journeyName ?? (report.journey === 'checkout' ? 'Checkout' : report.journey ?? 'Checkout')} comparison</caption>
+      <div className="profile-tools">
+        <h2>Profile comparison</h2>
+        {report.comparisons.some(item => item.status === 'regression') &&
+          <button className="filter" type="button" aria-pressed={regressionsOnly} onClick={() => {
+            setRegressionsOnly(!regressionsOnly); select(undefined); setExplaining(undefined);
+          }}><Icon name="filter" />Regressions only</button>}
+      </div>
+      <div className="table-wrap" role="region" aria-label="Profile comparison" tabIndex={0}>
+        <table className="profile-table">
+          <caption className="visually-hidden">{report.journeyName ?? (report.journey === 'checkout' ? 'Checkout' : report.journey ?? 'Checkout')} comparison</caption>
           <thead>
             <tr>
               <th scope="col">Customer profile</th>
@@ -143,7 +152,7 @@ function Comparison({ run }: { run: DashboardRun }) {
             </tr>
           </thead>
           <tbody>
-            {report.comparisons.map(({ profile, status }) => (
+            {report.comparisons.filter(item => !regressionsOnly || item.status === 'regression').map(({ profile, status }) => (
               <tr key={profile} className={status === 'regression' ? 'regression-row' : undefined}>
                 <th scope="row">
                   <span className="profile-name">{profile}</span>
@@ -151,7 +160,7 @@ function Comparison({ run }: { run: DashboardRun }) {
                 {environments.map((environment) => {
                   const result = report.cases.find((item) => item.profile === profile && item.environment === environment);
                   return (
-                    <td key={environment}>
+                    <td key={environment}><span className="mobile-cell-label" aria-hidden="true">{environment}</span>
                       {result ? (
                         <>
                           <span className="variant">{result.variant ?? 'Unavailable'}</span>
@@ -213,6 +222,33 @@ function Comparison({ run }: { run: DashboardRun }) {
   );
 }
 
+const views = [
+  { id: 'comparison', title: 'Journey rehearsal', icon: 'comparison' },
+  { id: 'explorer', title: 'Explore flag combinations', icon: 'explorer' },
+  { id: 'risk-map', title: 'Open Flag Risk Map', icon: 'risk' },
+] as const;
+
+function activeView() {
+  return views.find(item => '#' + item.id === location.hash) ?? views[0];
+}
+
+function EnvironmentSummary({ run }: { run?: DashboardRun | null }) {
+  const comparisons = run?.report.comparisons ?? [];
+  return <div className="environment-pair">
+    {environments.map(environment => {
+      const key = environment === 'Current' ? 'current' : 'proposed';
+      const passed = comparisons.filter(item => item[key] === 'pass').length;
+      return <section className="environment" key={key} aria-label={environment + ' results'}>
+        <h3><Icon name={key === 'current' ? 'flag' : 'branch'} />{environment}</h3>
+        <p className="score">{run ? <>{passed}<span> / {comparisons.length}</span></> : '—'}</p>
+        <p className="score-caption">{run ? 'profiles passed' : 'Awaiting result'}</p>
+        <div className="signal" aria-hidden="true">{comparisons.map(item =>
+          <span key={item.profile} data-outcome={item[key]} title={item.profile + ' · ' + (item[key] ?? 'Unavailable')} />)}</div>
+      </section>;
+    })}
+  </div>;
+}
+
 function Dashboard() {
   const [state, setState] = useState<DashboardState>();
   const [journey, setJourney] = useState('');
@@ -220,6 +256,15 @@ function Dashboard() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const revision = useRef(0);
+  const [view, setView] = useState(activeView);
+  const [explorerActive, setExplorerActive] = useState(false);
+  const [connectionLost, setConnectionLost] = useState(false);
+
+  useEffect(() => {
+    const changed = () => { setView(activeView()); window.scrollTo(0, 0); };
+    window.addEventListener('hashchange', changed);
+    return () => window.removeEventListener('hashchange', changed);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -232,10 +277,11 @@ function Dashboard() {
         const status: DashboardState = await response.json();
         if (!controller.signal.aborted && requestRevision === revision.current) {
           setState(status);
+          setConnectionLost(false);
         }
       } catch {
         if (!controller.signal.aborted && requestRevision === revision.current) {
-          setError('Could not connect to the local rehearsal API.');
+          setConnectionLost(true);
         }
       } finally {
         if (!controller.signal.aborted) timer = setTimeout(refresh, 700);
@@ -255,7 +301,7 @@ function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ journey: journey || state?.defaultJourney }),
       });
-      if (response.status !== 202 && response.status !== 409) {
+      if (response.status !== 202) {
         const body = await response.json();
         throw new Error(body.error ?? 'Start request failed.');
       }
@@ -291,64 +337,86 @@ function Dashboard() {
   const run = archived ?? state?.latest;
   const apiError = archived ? undefined : state?.error;
   const runError = apiError || run?.report.runErrors[0];
-  const status = busy ? 'Rehearsal running' : apiError ? 'Setup error' : run?.report.exitCode === 0 ? 'All profiles passed' :
+  const status = connectionLost ? 'Connection lost' : busy ? 'Rehearsal running' : apiError ? 'Setup error' : run?.report.exitCode === 0 ? 'All profiles passed' :
     run?.report.exitCode === 1 ? 'Regression detected' : run?.report.exitCode === 2 ?
       (runError || run?.report.cases.some(({ outcome }) => outcome === 'setup-error') ? 'Setup error' : 'Invalid comparison') :
       state ? 'Ready to rehearse' : 'Connecting to the local API';
 
+  const tone = connectionLost || apiError ? 'warning' : busy ? 'running' : run?.report.exitCode ?? 'ready';
+  const title = view.id === 'explorer' ? 'Flag Combination Explorer' : view.id === 'risk-map' ? 'Flag Risk Map' : 'Journey rehearsal';
   return (
-    <>
-      <header className="topbar">
-        <div className="wrap topbar-inner">
-          <strong>Flag Rehearsal</strong>
-          <a href={state?.flagsmithUrl ?? 'http://localhost:8000'} target="_blank" rel="noreferrer">Open Flagsmith</a>
+    <div className="workspace">
+      <a className="skip" href="#workspace-main" onClick={event => {
+        event.preventDefault(); document.getElementById('workspace-main')?.focus();
+      }}>Skip to workspace</a>
+      <aside className="sidebar">
+        <a className="brand" href="#comparison">
+          <img src={new URL('../docs/assets/logo.svg', import.meta.url).href} width="36" height="36" alt="" />
+          Flag Rehearsal
+        </a>
+        <nav aria-label="Workspace views">
+          {views.map(item => <a key={item.id} href={'#' + item.id} aria-current={view.id === item.id ? 'page' : undefined}>
+            <Icon name={item.icon} />{item.title}
+          </a>)}
+        </nav>
+        <a className="flagsmith-link" href={state?.flagsmithUrl ?? 'http://localhost:8000'} target="_blank" rel="noreferrer">
+          Open Flagsmith <Icon name="external" />
+        </a>
+      </aside>
+      <main id="workspace-main" tabIndex={-1}>
+        <div className="workspace-bar"><span>Workspace <b>/</b> {title}</span>
+          <span className="connection" data-offline={!state || connectionLost}><i />{connectionLost ? 'API offline' : state ? 'Local API connected' : 'Connecting'}</span>
         </div>
-      </header>
-      <main className="wrap">
-        <div className="page-heading">
-          <div>
-            <h1>Journey rehearsal</h1>
-            <p>Compare browser outcomes in Current and Proposed.</p>
+        <div className="content">
+          <div hidden={view.id !== 'comparison'}>
+            <header className="page-heading">
+              <div><h1>Journey rehearsal</h1><p>Compare the same browser journey across two Flagsmith environments.</p></div>
+              <div className="run-controls">
+                <div className="journey-picker">
+                  <label htmlFor="journey">Journey</label>
+                  <select id="journey" value={journey || state?.defaultJourney || ''} disabled={busy || !state || connectionLost}
+                    onChange={event => setJourney(event.target.value)}>
+                    {state?.journeys.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+                  </select>
+                </div>
+                <button type="button" className="run" disabled={busy || explorerActive || !state || connectionLost} onClick={start}>
+                  <Icon name="play" />{busy ? 'Running rehearsal…' : explorerActive ? 'Explorer running…' : 'Run Rehearsal'}
+                </button>
+              </div>
+            </header>
+            <section className="comparison-board" aria-label="Environment comparison">
+              <div className="board-title"><h2>Environment comparison</h2><p className="run-status" role="status" data-tone={tone}>{status}</p></div>
+              <EnvironmentSummary run={run} />
+              <div className="board-footer">
+                <Icon name="report" />
+                {run ? <><strong>{run.report.journeyName ?? run.report.journey ?? 'Checkout'}</strong>
+                  <span>{busy || apiError || connectionLost ? 'Last available report' : archived ? 'Saved report' : 'Latest report'}</span>
+                  <time dateTime={run.report.startedAt}>{new Date(run.report.startedAt).toLocaleString()}</time></> :
+                  <span>{busy ? 'Running the selected journey in both environments…' : 'Run a rehearsal to compare profile outcomes.'}</span>}
+                {state && state.runs.length > 0 && (
+                  <div className="saved-runs"><label htmlFor="saved-run">View report</label>
+                    <select id="saved-run" disabled={busy || connectionLost} value={archived?.id ?? ''} onChange={event => void openReport(event.target.value)}>
+                      <option value="">Latest run</option>
+                      {state.runs.map(({ id, name, startedAt }) =>
+                        <option key={id} value={id}>{name} · {new Date(startedAt).toLocaleString()}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </section>
+            {connectionLost && <p className="error-note" role="alert">Could not reach the local rehearsal API. Reconnecting…</p>}
+            {error && <p className="error-note" role="alert">{error}</p>}
+            {!busy && runError && <p className="error-note" role="alert">{runError}</p>}
+            {run && <Comparison key={run.id} run={run} />}
           </div>
-          <div className="run-controls">
-            <div className="journey-picker">
-              <label htmlFor="journey">Journey</label>
-              <select id="journey" value={journey || state?.defaultJourney || ''} disabled={busy || !state}
-                onChange={(event) => setJourney(event.target.value)}>
-                {state?.journeys.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
-              </select>
-            </div>
-            <button type="button" className="run" disabled={busy || !state} onClick={start}>
-              {busy ? 'Running rehearsal…' : 'Run Rehearsal'}
-            </button>
+          <div hidden={view.id !== 'explorer'}><Explorer rehearsalBusy={busy} onActivity={setExplorerActive} /></div>
+          <div hidden={view.id !== 'risk-map'}>
+            {state ? <RiskMap journeys={state.journeys} runs={state.runs} investigations={state.investigations} /> :
+              <p role="status">{connectionLost ? 'Could not reach the local rehearsal API.' : 'Loading reports…'}</p>}
           </div>
         </div>
-        <section className="result" data-state={busy ? 'running' : run?.report.exitCode ?? state?.phase}>
-          <p className="run-status" role="status">{status}</p>
-          {error && <p role="alert">{error}</p>}
-          {!busy && runError && <p role="alert">{runError}</p>}
-          {!busy && state?.phase === 'empty' && (
-            <p className="empty-text">Run a rehearsal to see results and failure evidence for each profile.</p>
-          )}
-          {busy && run && <p className="empty-text">Showing the previous completed run while this rehearsal runs.</p>}
-        </section>
-        {state && state.runs.length > 0 && (
-          <div className="saved-runs">
-            <label htmlFor="saved-run">View report</label>
-            <select id="saved-run" disabled={busy} value={archived?.id ?? ''} onChange={(event) => void openReport(event.target.value)}>
-              <option value="">Latest run</option>
-              {state.runs.map(({ id, name, startedAt }) =>
-                <option key={id} value={id}>{name} · {new Date(startedAt).toLocaleTimeString()}</option>)}
-            </select>
-          </div>
-        )}
-        {run && <Comparison key={run.id} run={run} />}
-        {state && <details className="evidence"><summary>Open Flag Risk Map</summary>
-          <RiskMap journeys={state.journeys} runs={state.runs} investigations={state.investigations} />
-        </details>}
-        <details className="evidence"><summary>Explore flag combinations</summary><Explorer /></details>
       </main>
-    </>
+    </div>
   );
 }
 

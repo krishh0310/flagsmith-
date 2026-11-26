@@ -19,7 +19,7 @@ function Artifacts({ id, result }: { id: string; result: CaseResult }) {
     {' '}{result.evidence?.trace && <a href={path + result.evidence.trace}>Trace</a>}</>;
 }
 
-export function Explorer() {
+export function Explorer({ rehearsalBusy, onActivity }: { rehearsalBusy: boolean; onActivity: (active: boolean) => void }) {
   const [options, setOptions] = useState<Options>([]);
   const [input, setInput] = useState<ExplorerInput>({ journey: '', profiles: [], flags: [] });
   const [plan, setPlan] = useState<ExplorerReport['plan']>();
@@ -40,6 +40,7 @@ export function Explorer() {
   async function run(preview: boolean) {
     setError('');
     setBusy(true);
+    if (!preview) onActivity(true);
     try {
       if (preview) setPlan(await api<ExplorerReport['plan']>('/plan', input));
       else setReport(await api<ExplorerReport>('', input));
@@ -47,10 +48,11 @@ export function Explorer() {
       setError(failure instanceof Error ? failure.message : 'Explorer failed.');
     } finally {
       setBusy(false);
+      if (!preview) onActivity(false);
     }
   }
-  return <section className="evidence">
-    <h2>Flag Combination Explorer</h2>
+  return <section className="tool-page">
+    <h1>Flag Combination Explorer</h1>
     <p>Run generated cases in a disposable Flagsmith environment.</p>
     <fieldset disabled={busy}>
       <label>Explorer journey <select value={input.journey} onChange={event =>
@@ -67,7 +69,7 @@ export function Explorer() {
         </label>)}
       </fieldset>)}
       <button onClick={() => void run(true)}>Preview plan</button>{' '}
-      <button disabled={!plan} onClick={() => void run(false)}>Run Explorer</button>
+      <button disabled={!plan || rehearsalBusy} onClick={() => void run(false)}>{rehearsalBusy ? 'Rehearsal running…' : 'Run Explorer'}</button>
     </fieldset>
     {busy && <button onClick={() => void api('/cancel', {}).catch(failure => setError(failure.message))}>Cancel Explorer</button>}
     {error && <p role="alert">{error}</p>}
@@ -79,7 +81,7 @@ export function Explorer() {
       {plan.uncoveredPairs.length > 0 && <details><summary>Uncovered pairs ({plan.uncoveredPairs.length})</summary>
         <ul>{plan.uncoveredPairs.map(pair => <li key={pair}>{pair}</li>)}</ul></details>}
     </div>}
-    {report && <div>
+    {report && <div className="explorer-results">
       <h3>Explorer results</h3>
       <p>{report.cases.length}/{report.plan.cases} cases · Cleanup {report.cleanup.status} · {report.cleanup.resource}</p>
       {report.errors.map((message, i) => <p key={i}>{message}</p>)}
