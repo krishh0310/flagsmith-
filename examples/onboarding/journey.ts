@@ -1,9 +1,23 @@
+import { buildOnboarding, previewOnboarding } from './preview.ts';
 import { expect } from '@playwright/test';
 import type { JourneyRegistration } from '../../scripts/journey.ts';
 
 export const onboarding: JourneyRegistration = {
   name: 'Onboarding',
   flagNames: ['new_onboarding', 'save_onboarding_progress'],
+  explorer: {
+    flags: ['new_onboarding', 'save_onboarding_progress', 'show_onboarding_tips'],
+    async start(config) {
+      await buildOnboarding();
+      const server = await previewOnboarding('explorer', 0, config);
+      const address = server.httpServer.address();
+      if (!address || typeof address === 'string') {
+        await server.close();
+        throw Error('Explorer preview has no TCP address');
+      }
+      return { url: `http://127.0.0.1:${address.port}`, close: () => server.close() };
+    },
+  },
   urls: { Current: 'http://127.0.0.1:4181', Proposed: 'http://127.0.0.1:4182' },
   identities: [
     { id: 'starter', traits: { plan: 'free', app_version: 2 } },
@@ -23,6 +37,7 @@ export const onboarding: JourneyRegistration = {
     check('Continue workspace onboarding');
     await page.getByLabel('Workspace name').fill('Demo studio');
     await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(status).toHaveText('Workspace ready: Demo studio');
+    await expect(status).toHaveText(/Workspace ready: Demo studio|Cannot save workspace progress/);
+    if ((await status.innerText()) !== 'Workspace ready: Demo studio') throw new Error(await status.innerText());
   },
 };

@@ -47,3 +47,38 @@ jobs:
           if test -f .env; then
             docker compose down --volumes
           fi
+
+  demo-integrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: flag-rehearsal-integrations-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps --only-shell chromium
+      - run: npm run setup:demo
+      - run: npm run test:integration
+      - name: Preserve integration evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: flag-rehearsal-integrations
+          path: |
+            rehearsal-runs/**/report.json
+            rehearsal-runs/pricing-assignments-*.json
+            rehearsal-runs/**/*.png
+            rehearsal-runs/**/*.zip
+            rehearsal-runs/**/summary.txt
+      - name: Stop the isolated stack
+        if: ${{ always() }}
+        run: |
+          if test -f .env; then
+            docker compose down --volumes
+          fi

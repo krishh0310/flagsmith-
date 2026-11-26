@@ -17,7 +17,10 @@
     "rehearse": "node scripts/rehearse.ts",
     "dashboard": "vite build --mode dashboard && node scripts/start-dashboard.ts",
     "setup:demo": "sh scripts/setup-demo.sh",
-    "start:onboarding": "node examples/onboarding/serve.ts"
+    "start:onboarding": "node examples/onboarding/serve.ts",
+    "explore": "node scripts/explore.ts",
+    "demo": "sh scripts/demo.sh",
+    "test:integration": "sh scripts/integration-demo.sh"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
@@ -28,7 +31,7 @@
     "vite": "8.3.7"
   },
   "dependencies": {
-    "@fastify/static": "10.1.5",
+    "@fastify/static": "10.1.12",
     "@flagsmith/flagsmith": "12.5.0",
     "fastify": "5.12.8",
     "react": "19.2.8",

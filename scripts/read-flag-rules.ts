@@ -6,11 +6,16 @@ import { readDemoTargets } from './demo-config.ts';
 type Rule = { type: string; conditions: Condition[]; rules: Rule[] };
 type Segment = { id: number; name: string; rules: Rule[] };
 type FlagState = {
-  environment_default: { enabled: boolean };
+  environment_default: { enabled: boolean; value?: { type: string; value: string } | null; variants?: { id: number; weight: number }[] };
   segment_overrides: { segment: { id: number }; priority: number; enabled: boolean }[];
 };
 
-export async function readFlagRules(flag: string): Promise<FlagSnapshot | undefined> {
+type Detail = { id: number; name: string; multivariate_options?: { id: number; integer_value: number }[] };
+
+async function withFlagConfiguration<T>(flag: string, resolve: (config: {
+  feature: Detail; states: FlagState[]; project: string;
+  read: <Result>(path: string) => Promise<Result>;
+}) => Promise<T> | T): Promise<T | undefined> {
   try {
     const settings = loadEnv('production', process.cwd(), 'FLAGSMITH_');
     const origin = new URL(settings.FLAGSMITH_API_URL);
@@ -47,9 +52,9 @@ export async function readFlagRules(flag: string): Promise<FlagSnapshot | undefi
     if (current.name !== 'Current' || proposed.name !== 'Proposed' || current.project !== proposed.project) return undefined;
 
     const project = `/api/v1/projects/${current.project}`;
-    let feature: { id: number; name: string } | undefined;
-    for (let page = 1; !feature; page++) {
-      const result = await read<{ results: { id: number; name: string }[]; next: string | null }>(
+    let feature: Detail | undefined;
+    for (let page = 1; !feature && page <= 20; page++) {
+      const result = await read<{ results: Detail[]; next: string | null }>(
         `${project}/features/?page=${page}`,
       );
       feature = result.results.find(({ name }) => name === flag);
@@ -59,6 +64,27 @@ export async function readFlagRules(flag: string): Promise<FlagSnapshot | undefi
     const states = await Promise.all(environments.map((name) =>
       read<FlagState>(`/api/__future__/environments/${envKeys[name]}/features/${feature.id}/`),
     ));
+    return await resolve({ feature, states, project, read });
+  } catch {
+    return undefined;
+  }
+}
+
+export async function readRemoteConfiguration(flag: string) {
+  return withFlagConfiguration(flag, ({ feature, states }) => {
+    if (states.some(state => state.segment_overrides.length)) return undefined;
+    return Object.fromEntries(environments.map((name, index) => {
+      const state = states[index].environment_default;
+      return [name, { enabled: state.enabled, default: state.value,
+        variants: state.variants?.map(({ id, weight }) => ({
+          weight, value: feature.multivariate_options?.find(option => option.id === id)?.integer_value,
+        })) }];
+    }));
+  });
+}
+
+export async function readFlagRules(flag: string): Promise<FlagSnapshot | undefined> {
+  return withFlagConfiguration(flag, async ({ states, project, read }) => {
     const segmentIds = new Set(states.flatMap(({ segment_overrides }) => segment_overrides.map(({ segment }) => segment.id)));
     const segments = new Map(await Promise.all([...segmentIds].map(async (id) =>
       [id, await read<Segment>(`${project}/segments/${id}/`)] as const,
@@ -85,7 +111,5 @@ export async function readFlagRules(flag: string): Promise<FlagSnapshot | undefi
     }
 
     return { Current: normalize(states[0]), Proposed: normalize(states[1]) };
-  } catch {
-    return undefined;
-  }
+  });
 }

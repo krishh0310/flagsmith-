@@ -36,8 +36,8 @@ async function request<T>(path: string, label: string, options: RequestInit = {}
 
 async function setup() {
   const order = process.argv[2];
-  if (order !== undefined && order !== 'broken' && order !== 'fixed' && order !== 'onboarding-broken' && order !== 'onboarding-fixed') {
-    throw new Error('Usage: npm run setup:flagsmith -- [broken | fixed | onboarding-broken | onboarding-fixed]');
+  if (order !== undefined && order !== 'broken' && order !== 'fixed' && order !== 'onboarding-broken' && order !== 'onboarding-fixed' && order !== 'pricing-broken' && order !== 'pricing-fixed') {
+    throw new Error('Usage: npm run setup:flagsmith -- [broken | fixed | onboarding-broken | onboarding-fixed | pricing-broken | pricing-fixed]');
   }
   const email = process.env.FLAGSMITH_ADMIN_EMAIL;
   const password = process.env.FLAGSMITH_ADMIN_PASSWORD;
@@ -144,10 +144,18 @@ async function setup() {
   if (order) {
     const projectPath = `projects/${project.id}/`;
     const flags = await list<Resource>(projectPath + 'features/', 'List demo flags');
-    const ensureFlag = async (flagName: string) => flags.find(({ name }) => name === flagName) ??
-      await create<Resource>(projectPath + 'features/', `Create ${flagName}`, {
+    const ensureFlag = async (flagName: string) => {
+      const existing = flags.find(({ name }) => name === flagName);
+      if (existing) return existing;
+      const feature = await create<Resource>(projectPath + 'features/', `Create ${flagName}`, {
         name: flagName, type: 'STANDARD', default_enabled: false,
       });
+      flags.push(feature);
+      return feature;
+    };
+    for (const name of ['new_onboarding', 'save_onboarding_progress', 'show_onboarding_tips']) {
+      await ensureFlag(name);
+    }
     const existing = await list<Segment>(projectPath + 'segments/', 'List demo segments');
     const definitions = [
       { name: 'Paid plan', property: 'plan', operator: 'EQUAL', value: 'paid', enabled: true },
@@ -171,7 +179,42 @@ async function setup() {
       overrides.push({ priority, segment: { id: segment.id }, enabled });
     }
 
-    if (order.startsWith('onboarding-')) {
+    if (order.startsWith('pricing-')) {
+      const expectedOptions = [
+        { type: 'int', integer_value: 10, default_percentage_allocation: 30 },
+        { type: 'int', integer_value: 20, default_percentage_allocation: 20 },
+      ];
+      type Variant = { id: number; integer_value: number; default_percentage_allocation: number };
+      type PricingFeature = Resource & { type: string; multivariate_options: Variant[] };
+      const path = projectPath + 'features/';
+      const existing = (flags as PricingFeature[]).find(item => item.name === 'pricing_discount');
+      const feature = existing ?? await create<PricingFeature>(path, 'Create pricing_discount', {
+        name: 'pricing_discount', type: 'MULTIVARIATE', default_enabled: true,
+        initial_value: '0', multivariate_options: expectedOptions,
+      });
+      if (feature.type !== 'MULTIVARIATE' || feature.multivariate_options.length !== 2 ||
+          !expectedOptions.every(option => feature.multivariate_options.some(variant =>
+            variant.integer_value === option.integer_value &&
+            Number(variant.default_percentage_allocation) === option.default_percentage_allocation))) {
+        throw new Error('pricing_discount has unexpected variants or allocation.');
+      }
+      for (const name of environmentNames) {
+        const value = name === 'Proposed' && order === 'pricing-broken' ? '35' : '0';
+        const path = `/api/__future__/environments/${sdkKeys.get(`FLAGSMITH_${name.toUpperCase()}_ENVIRONMENT_KEY`)}/features/${feature.id}/`;
+        const controls = { enabled: true, value: { type: 'integer', value },
+          variants: feature.multivariate_options.map(({ id, default_percentage_allocation }) =>
+            ({ id, weight: Number(default_percentage_allocation) })) };
+        const existingState = await request<FlagState>(path, `Read ${name} pricing flag`, { headers });
+        if (existingState.segment_overrides.length) throw new Error('Remove unrelated pricing overrides before seeding the demo.');
+        const saved = await request<{ environment_default: typeof controls }>(path, `Save ${name} pricing flag`, {
+          method: 'PATCH', headers, body: JSON.stringify({ environment_default: controls }),
+        });
+        if (saved.environment_default.value.value !== value ||
+            !controls.variants.every(variant => saved.environment_default.variants.some(item =>
+              item.id === variant.id && item.weight === variant.weight))) throw Error('Pricing configuration did not round trip.');
+        console.log(`${name}: default discount ${value}% (50%), variants 10% (30%) and 20% (20%).`);
+      }
+    } else if (order.startsWith('onboarding-')) {
       const [paid, older] = overrides;
       for (const flagName of ['new_onboarding', 'save_onboarding_progress']) {
         const feature = await ensureFlag(flagName);

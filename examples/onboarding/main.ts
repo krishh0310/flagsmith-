@@ -16,7 +16,14 @@ async function start() {
   const saving = flags.save_onboarding_progress?.enabled;
   if (typeof newFlow !== 'boolean' || typeof saving !== 'boolean') throw Error('Missing onboarding flags');
   status.textContent = newFlow ? 'New onboarding' : 'Classic onboarding';
-  status.dataset.flags = JSON.stringify({ new_onboarding: newFlow, save_onboarding_progress: saving });
+  const tips = flags.show_onboarding_tips?.enabled;
+  status.dataset.flags = JSON.stringify({ new_onboarding: newFlow, save_onboarding_progress: saving,
+    ...(typeof tips === 'boolean' && { show_onboarding_tips: tips }) });
+  if (tips) {
+    const help = document.createElement('p');
+    help.textContent = 'Tip: Choose a workspace name your team will recognize.';
+    form.before(help);
+  }
   const key = 'onboarding-draft:' + identity;
   function finish(name: string) {
     form.hidden = true;

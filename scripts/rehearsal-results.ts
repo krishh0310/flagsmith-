@@ -4,10 +4,19 @@ export const environments = ['Current', 'Proposed'] as const;
 export type Environment = typeof environments[number];
 export type FlagEvaluation = { name: string; enabled: boolean; reason?: string; traits: Record<string, unknown> };
 
+export type RemoteValue = {
+  enabled?: boolean;
+  value?: string | number | boolean | null;
+  valid?: boolean;
+  expectedMinor?: number;
+  renderedMinor?: number;
+};
+
 export type CaseResult = {
   environment: Environment;
   profile: string;
   variant: string | null;
+  remoteValues?: Record<string, RemoteValue>;
   observedFlags?: Record<string, boolean>;
   flagEvaluation?: FlagEvaluation;
   outcome: 'pass' | 'fail' | 'setup-error';
@@ -15,9 +24,17 @@ export type CaseResult = {
   evidence?: { screenshot?: string; trace?: string; errors?: string[] };
 };
 
+export type RemoteConfiguration = Record<string, {
+  enabled: boolean;
+  default?: { type: string; value: string } | null;
+  variants?: { weight: number; value?: number }[];
+}>;
+
 export type RehearsalReport = {
   journey?: string;
   journeyName?: string;
+  remoteValueNames?: readonly string[];
+  remoteConfigurations?: Record<string, RemoteConfiguration>;
   flagNames?: readonly string[];
   startedAt: string;
   exitCode: number;

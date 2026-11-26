@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import type { DashboardRun, DashboardState } from '../scripts/dashboard-api.ts';
 import type { ProfileExplanation } from '../scripts/flag-explanation.ts';
 import { environments, flagValueLabel, type CaseResult } from '../scripts/rehearsal-results.ts';
+import { RiskMap } from './risk-map.tsx';
+import { Explorer } from './explorer.tsx';
 import './dashboard.css';
 
 const outcomeLabels = { pass: 'Pass', fail: 'Fail', 'setup-error': 'Setup error' };
@@ -105,6 +107,11 @@ function Evidence({ id, result }: { id: string; result: CaseResult }) {
   );
 }
 
+function formatPrice(minor?: number) {
+  return minor === undefined ? 'Unavailable' :
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(minor / 100);
+}
+
 function Comparison({ run }: { run: DashboardRun }) {
   const { id, report } = run;
   const [selected, select] = useState<CaseResult>();
@@ -114,6 +121,7 @@ function Comparison({ run }: { run: DashboardRun }) {
     report.cases.filter((item) => item.environment === environment && item.outcome === 'pass').length,
   );
   const total = report.comparisons.length;
+  const remoteNames = report.remoteValueNames ?? [];
   const flagNames = report.flagNames ?? [...new Set(report.cases.flatMap(({ observedFlags }) =>
     Object.keys(observedFlags ?? {}),
   ))];
@@ -157,6 +165,18 @@ function Comparison({ run }: { run: DashboardRun }) {
                           )}
                         </>
                       ) : 'Unavailable'}
+                      {remoteNames.map(name => {
+                        const observation = result?.remoteValues?.[name];
+                        const config = report.remoteConfigurations?.[name]?.[environment];
+                        return <dl className="observed-flags" key={name}>
+                          <dt><code>{name}</code> · SDK value</dt>
+                          <dd>{observation?.value == null ? 'Unavailable' : `${JSON.stringify(observation.value)} (${typeof observation.value})`}</dd>
+                          {observation?.valid === false && <dd>Invalid value</dd>}
+                          <dt>Configured default</dt><dd>{config?.default?.value ?? 'Unavailable'}</dd>
+                          <dt>Expected price</dt><dd>{formatPrice(observation?.expectedMinor)}</dd>
+                          <dt>Rendered price</dt><dd>{formatPrice(observation?.renderedMinor)}</dd>
+                        </dl>;
+                      })}
                       {flagNames.length > 0 && (
                         <dl className="observed-flags">
                           {flagNames.map((name) => (
@@ -323,6 +343,10 @@ function Dashboard() {
           </div>
         )}
         {run && <Comparison key={run.id} run={run} />}
+        {state && <details className="evidence"><summary>Open Flag Risk Map</summary>
+          <RiskMap journeys={state.journeys} runs={state.runs} investigations={state.investigations} />
+        </details>}
+        <details className="evidence"><summary>Explore flag combinations</summary><Explorer /></details>
       </main>
     </>
   );

@@ -4,10 +4,10 @@ import { chromium, type Browser, type BrowserContext } from '@playwright/test';
 import { build, preview, type PreviewServer } from 'vite';
 import { executeJourney, type Identity, type JourneyRegistration } from './journey.ts';
 import { explainFlag as buildExplanation } from './flag-explanation.ts';
-import { readFlagRules } from './read-flag-rules.ts';
+import { readFlagRules, readRemoteConfiguration } from './read-flag-rules.ts';
 import { compare, environments, errorMessage, type CaseResult, type Environment, type RehearsalRun } from './rehearsal-results.ts';
 
-async function rehearseCase(
+export async function rehearseCase(
   browser: Browser,
   url: string,
   environment: Environment,
@@ -15,18 +15,23 @@ async function rehearseCase(
   run: JourneyRegistration['run'],
   directory: string,
   runErrors: string[],
+  evidencePrefix = environment.toLowerCase(),
+  signal?: AbortSignal,
 ): Promise<CaseResult> {
   let context: BrowserContext | undefined;
   const profile = identity.id;
+  const abort = () => { void context?.close().catch(() => {}); };
+  signal?.addEventListener('abort', abort, { once: true });
 
   try {
     context = await browser.newContext();
+    signal?.throwIfAborted();
     await context.tracing.start({ screenshots: true, snapshots: true });
     const page = await context.newPage();
     const result = await executeJourney(run, page, url, environment, identity);
 
     if (result.outcome === 'fail') {
-      const file = `${environment.toLowerCase()}-${profile}`;
+      const file = `${evidencePrefix}-${profile}`;
       const screenshot = `${file}.png`;
       const trace = `${file}.zip`;
       result.evidence = {};
@@ -56,6 +61,7 @@ async function rehearseCase(
       error: { step: 'Prepare browser context', message: errorMessage(error) },
     };
   } finally {
+    signal?.removeEventListener('abort', abort);
     await context?.close().catch((error) => {
       runErrors.push(`${environment} / ${profile}: closing context failed. ${errorMessage(error)}`);
     });
@@ -74,6 +80,10 @@ export async function runRehearsal(journey: string, registration: JourneyRegistr
   let browser: Browser | undefined;
   let step = 'Validate journey registration';
   const before = explainFlag && !urls ? await readFlagRules(explainFlag) : undefined;
+
+  const remoteNames = urls ? [] : registration.remoteValueNames ?? [];
+  const readRemote = () => Promise.all(remoteNames.map(name => readRemoteConfiguration(name)));
+  const remoteBefore = await readRemote();
 
   try {
     if (
@@ -107,7 +117,7 @@ export async function runRehearsal(journey: string, registration: JourneyRegistr
           });
           const address = server.httpServer.address();
           if (!address || typeof address === 'string') throw new Error('Preview has no HTTP port.');
-          url = `http://127.0.0.1:${address.port}/`;
+          url = new URL(registration.targetPath ?? '/', `http://127.0.0.1:${address.port}/`).href;
         }
         for (const identity of identities) {
           cases.push(await rehearseCase(browser, url, environment, identity, run, directory, runErrors));
@@ -167,7 +177,12 @@ export async function runRehearsal(journey: string, registration: JourneyRegistr
   const terminal = summary.join('\n') + '\n';
   const after = explainFlag && before ? await readFlagRules(explainFlag) : undefined;
   const flagExplanation = explainFlag ? buildExplanation(explainFlag, before, after, cases, profileIds) : undefined;
-  const report = { journey, journeyName: registration.name, flagNames: registration.flagNames, startedAt, exitCode, status, cases, comparisons: comparison.profiles, runErrors, flagExplanation };
+  const remoteAfter = await readRemote();
+  const remoteConfigurations = Object.fromEntries(remoteNames.flatMap((name, index) => {
+    const value = remoteBefore[index];
+    return value && JSON.stringify(value) === JSON.stringify(remoteAfter[index]) ? [[name, value]] : [];
+  }));
+  const report = { journey, journeyName: registration.name, flagNames: registration.flagNames, remoteValueNames: registration.remoteValueNames, remoteConfigurations: remoteNames.length ? remoteConfigurations : undefined, startedAt, exitCode, status, cases, comparisons: comparison.profiles, runErrors, flagExplanation };
   await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
   await writeFile(join(directory, 'summary.txt'), terminal);
   return { directory, report, terminal };

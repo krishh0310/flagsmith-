@@ -1,3 +1,5 @@
+import { todomvc } from './examples/todomvc/journey.ts';
+import { pricing } from './examples/pricing/journey.ts';
 import { onboarding } from './examples/onboarding/journey.ts';
 import { checkout } from './scripts/checkout-journey.ts';
 import { flagSmoke } from './scripts/flag-smoke-journey.ts';
@@ -10,5 +12,7 @@ export const defaultJourney = 'checkout';
 export const journeys: Record<string, JourneyRegistration> = {
   checkout: { name: 'Checkout', identities, run: checkout, explainFlag: 'express_checkout' },
   onboarding,
+  pricing,
+  todomvc,
   'flag-smoke': { name: 'Checkout flag smoke', identities, run: flagSmoke },
 };
